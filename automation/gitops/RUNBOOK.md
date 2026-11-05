@@ -411,14 +411,20 @@ push with 401/403 if the registry host or robot permissions do not match.
 ### a. `tpa-secret` — RHTPA credentials for the Tekton tasks
 
 The same `tpa-cli` client secret from §4, in the shape
-`upload-sbom-to-trustification` requires. All four keys are mandatory.
+`upload-sbom-to-rhtpa` requires. The four URL and OIDC keys are mandatory;
+`oidc_ca_crt` supplies the cluster ingress CA for the self-signed Keycloak
+route certificate.
 
 ```sh
+oc -n openshift-ingress-operator get secret router-ca \
+  -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/rhtpa-ingress-ca.crt
+
 oc -n $NS create secret generic tpa-secret \
   --from-literal=bombastic_api_url="https://server-trusted-profile-analyzer.${DOMAIN}" \
   --from-literal=oidc_issuer_url="https://sso.${DOMAIN}/realms/backstage" \
   --from-literal=oidc_client_id=tpa-cli \
   --from-literal=oidc_client_secret='<tpaCliClientSecret from §4>' \
+  --from-file=oidc_ca_crt=/tmp/rhtpa-ingress-ca.crt \
   --dry-run=client -o yaml | oc apply -f -
 ```
 

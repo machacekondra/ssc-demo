@@ -15,10 +15,10 @@ spec:
     ## Configuration
 
     This task requires some configuration and authentication secrets. By default, the task takes
-    them from a secret called `trustification-secret` that exists in the same namespace where the
+    them from a secret called `tpa-secret` that exists in the same namespace where the
     task runs. You can override the secret name via the `TRUSTIFICATION_SECRET_NAME` param.
 
-    ### trustification-secret
+    ### tpa-secret
 
     Required keys:
     - bombastic_api_url: URL of the BOMbastic api host (e.g. https://sbom.trustification.dev)
@@ -29,6 +29,8 @@ spec:
     Optional keys:
     - supported_cyclonedx_version: If the SBOM uses a higher CycloneDX version,
         `syft convert` to the supported version before uploading.
+    - oidc_ca_crt: PEM CA bundle for a self-signed OIDC issuer certificate. This is
+        added to the task's trust store along with the cluster-provided CA bundle.
   params:
   - name: COMPONENT_NAME
     description: >-
@@ -46,7 +48,7 @@ spec:
     description: "Maximum number of retries for transient HTTP(S) errors"
     type: string
   - name: TRUSTIFICATION_SECRET_NAME
-    default: trustification-secret
+    default: tpa-secret
     description: Name of the Secret containing auth and configuration
     type: string
   - name: FAIL_IF_TRUSTIFICATION_NOT_CONFIGURED
@@ -182,9 +184,18 @@ spec:
       set -o errexit -o nounset -o pipefail
 
       ca_bundle=/tekton-custom-certs/ca-bundle.crt
-      if [ -f "$ca_bundle" ]; then
+      if [[ -f "$ca_bundle" ]]; then
         echo "INFO: Using mounted CA bundle: $ca_bundle"
-        cp -vf $ca_bundle /etc/pki/ca-trust/source/anchors
+        cp -vf "$ca_bundle" /etc/pki/ca-trust/source/anchors/tekton-ca-bundle.crt
+      fi
+
+      oidc_ca_bundle="$TRUSTIFICATION_SECRET_PATH/oidc_ca_crt"
+      if [[ -f "$oidc_ca_bundle" ]]; then
+        echo "INFO: Adding the RHTPA OIDC CA bundle from '$TRUSTIFICATION_SECRET_NAME'"
+        cp -vf "$oidc_ca_bundle" /etc/pki/ca-trust/source/anchors/rhtpa-oidc-ca.crt
+      fi
+
+      if [[ -f "$ca_bundle" || -f "$oidc_ca_bundle" ]]; then
         update-ca-trust
       fi
 

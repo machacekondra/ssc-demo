@@ -260,9 +260,14 @@ spec:
         if [[ -f /tekton-custom-certs/ca-bundle.crt ]]; then
           cp /tekton-custom-certs/ca-bundle.crt \
             /etc/pki/ca-trust/source/anchors/tekton-ca-bundle.crt
-
-          update-ca-trust
         fi
+
+        if [[ -f /run/secrets/trustification/oidc_ca_crt ]]; then
+          cp /run/secrets/trustification/oidc_ca_crt \
+            /etc/pki/ca-trust/source/anchors/rhtpa-oidc-ca.crt
+        fi
+
+        update-ca-trust
 
         CURL_OPTS=(
           --silent
