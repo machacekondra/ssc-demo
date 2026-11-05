@@ -28,7 +28,10 @@ spec:
             - -c
             - |
               echo "Waiting for OIDC endpoint: {{ include "tpa-prerequisites.issuerUrl" . }}"
-              until curl -sf -o /dev/null "{{ include "tpa-prerequisites.issuerUrl" . }}/.well-known/openid-configuration"; do
+              # The cluster ingress serves a certificate chain this hook's
+              # minimal image does not trust. This request only gates readiness;
+              # application OIDC traffic still uses its configured issuer URL.
+              until curl -ksf -o /dev/null "{{ include "tpa-prerequisites.issuerUrl" . }}/.well-known/openid-configuration"; do
                 echo "OIDC endpoint not ready, retrying in 10s..."
                 sleep 10
               done

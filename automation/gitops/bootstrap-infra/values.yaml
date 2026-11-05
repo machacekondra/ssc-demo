@@ -56,8 +56,8 @@ deployer:
   apiUrl: ""
 
 gitops:
-  repoUrl: "https://github.com/lzspangler/ssc-demo.git"
-  revision: "ssc-demo"
+  repoUrl: "https://github.com/machacekondra/ssc-demo.git"
+  revision: "main"
   basePath: "automation/gitops"
   # The Tekton resources are NOT under basePath -- they live at the repo root,
   # where pipelines/README.md documents them. Argo applies them from there
@@ -259,7 +259,7 @@ components:
   # enabled: false here; the pipelines then need an `output-image` on some
   # other registry and a push secret you create yourself.
   quay:
-    enabled: true
+    enabled: false
     namespace: quay-registry
     syncWave: "10"
     # Organization the images land in, and the robot account that pushes them.

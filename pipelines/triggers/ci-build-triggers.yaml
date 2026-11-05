@@ -106,11 +106,11 @@ spec:
     #     | base64 -d | python3 -c 'import sys,json;print(list(json.load(sys.stdin)["auths"]))'
     # Both must agree with the value below.
     - name: image-registry
-      default: quay.apps.cluster-6gpcf.dyn.redhatworkshops.io
+      default: quay.io
     # Organization the Quay seeding job created, and which the `tssc+remediation`
     # robot in the `quay-push` Secret is a `creator` of.
     - name: image-organization
-      default: tssc
+      default: machacekondra
     - name: dockerfile
       default: Containerfile
     - name: subdirectory
