@@ -292,10 +292,10 @@ components:
   # integrates through `spec.exploitIntelligence` on the TrustedProfileAnalyzer
   # CR, which the charts.openshift.io Helm chart has no equivalent for.
   #
-  # `rhtpaPrerequisites` stays enabled either way -- Postgres, the S3
-  # ObjectBucketClaim and the oidc-tpa-cli Secret are shared, and this
-  # component reuses all three. That is what keeps the switch a swap rather
-  # than a rebuild.
+  # `rhtpaPrerequisites` stays enabled either way -- Postgres and the
+  # oidc-tpa-cli Secret are shared. It creates the ObjectBucketClaim and
+  # `trustify` Secret only in s3 mode. That is what keeps the switch a swap
+  # rather than a rebuild.
   #
   # MIGRATING AN EXISTING INSTALL is not just a flag flip: Trustify 2.x -> 3.x
   # is a major version, and the operator's own migrateDatabase module runs
@@ -308,9 +308,10 @@ components:
   # equivalent, so keeping two paths meant keeping one that could never grow
   # the feature.
   #
-  # `rhtpaPrerequisites` above stays separate and still owns Postgres, the S3
-  # ObjectBucketClaim and the oidc-tpa-cli Secret. It reads `storage` from
-  # HERE, so the two cannot disagree about s3-vs-filesystem.
+  # `rhtpaPrerequisites` above stays separate and owns Postgres and the
+  # oidc-tpa-cli Secret; it creates the S3 ObjectBucketClaim only in s3 mode.
+  # It reads `storage.type` from HERE, so the two cannot disagree about
+  # s3-vs-filesystem.
   rhtpaOperator:
     enabled: true
     namespace: trusted-profile-analyzer
@@ -326,9 +327,12 @@ components:
     # Ingress via the CR's ingress.additionalAnnotations.
     routeTimeout: 300s
     storage:
-      # s3 (needs ODF) or filesystem. Also read by rhtpaPrerequisites, which
-      # only raises the ObjectBucketClaim in s3 mode.
+      # s3 (needs ODF) or filesystem. Filesystem storage uses a PVC of this
+      # size; 50Gi is a small demo allocation with some headroom.
       type: filesystem
+      size: 50Gi
+      # Also read by rhtpaPrerequisites, which creates the ObjectBucketClaim
+      # only in s3 mode.
       bucket: trustify
       # NooBaa's S3 endpoint. Empty derives
       # `https://s3-openshift-storage.<domain>:443`.

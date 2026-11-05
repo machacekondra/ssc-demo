@@ -73,6 +73,9 @@ spec:
 
   storage:
     type: {{ $t.storage.type | quote }}
+    {{- if eq $t.storage.type "filesystem" }}
+    size: {{ required "trustedProfileAnalyzer.storage.size is required for filesystem storage" $t.storage.size | quote }}
+    {{- end }}
     {{- if eq $t.storage.type "s3" }}
     bucket: {{ $t.storage.bucket | quote }}
     region: {{ include "rhtpa-operator.s3Endpoint" . | quote }}

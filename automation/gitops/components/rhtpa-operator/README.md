@@ -17,15 +17,18 @@ the feature. Keeping both meant maintaining a path that was a dead end.
 ## What it reuses
 
 Nothing here provisions infrastructure. `components.rhtpaPrerequisites` stays
-enabled and continues to own all three shared pieces:
+enabled and owns the database and OIDC client secret. In S3 mode it also owns
+the ObjectBucketClaim and its credentials:
 
 | Resource | Provides |
 |---|---|
 | `tpa-postgresql` (Deployment + Secret) | the database |
-| `trustify` (Secret from the ObjectBucketClaim) | S3 credentials |
+| `trustify` (Secret from the ObjectBucketClaim) | S3 credentials (S3 mode only) |
 | `oidc-tpa-cli` (Secret) | the `tpa-cli` client secret |
 
-That is what makes switching a swap rather than a rebuild.
+Filesystem mode does not create `trustify`; it stores documents on a PVC. Set
+`trustedProfileAnalyzer.storage.size` for that PVC (the demo defaults to
+`50Gi`). That is what makes switching a swap rather than a rebuild.
 
 ## Things worth knowing before you edit it
 

@@ -551,6 +551,7 @@ spec:
           routeTimeout: {{ $ro.routeTimeout | quote }}
           storage:
             type: {{ $ro.storage.type | quote }}
+            size: {{ $ro.storage.size | quote }}
             bucket: {{ $ro.storage.bucket | quote }}
             regionEndpoint: {{ $ro.storage.regionEndpoint | quote }}
           oidc:

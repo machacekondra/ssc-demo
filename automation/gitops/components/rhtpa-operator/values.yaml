@@ -7,12 +7,12 @@
 # TrustedProfileAnalyzer CR, which only the operator provides, so the Helm
 # path was a dead end that could never grow the feature.
 #
-# WHAT IT REUSES: nothing here provisions Postgres, the S3 bucket or the OIDC
+# WHAT IT REUSES: nothing here provisions Postgres, S3 credentials or the OIDC
 # client secret. Those come from components.rhtpaPrerequisites exactly as
 # before, and that component stays enabled. This replaces only the RHTPA
 # application itself, which is what keeps the migration tractable:
 #   tpa-postgresql  (Secret + Deployment)  database credentials
-#   trustify        (Secret from the ObjectBucketClaim)  S3 credentials
+#   trustify        (Secret from the ObjectBucketClaim)  S3 mode only
 #   oidc-tpa-cli    (Secret)  the tpa-cli client secret
 # =============================================================================
 
@@ -64,6 +64,8 @@ trustedProfileAnalyzer:
     # s3 (needs ODF/NooBaa) or filesystem. Must match the prerequisites
     # component -- it only raises the ObjectBucketClaim in s3 mode.
     type: s3
+    # Required by the bundled chart when type is filesystem.
+    size: 50Gi
     bucket: trustify
     # NooBaa's S3 endpoint. Empty derives `https://s3-openshift-storage.<domain>:443`.
     regionEndpoint: ""

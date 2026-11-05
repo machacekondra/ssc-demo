@@ -235,9 +235,10 @@ installed by the RHTPA operator (`TrustedProfileAnalyzer`, `rhtpa.io/v1`) via
 integrates through `spec.exploitIntelligence` on that CR and has no
 Helm-chart equivalent.
 
-`components.rhtpaPrerequisites` stays enabled and still owns Postgres, the S3
-ObjectBucketClaim and `oidc-tpa-cli`; the CR reuses all three, and reads
-`storage` from `components.rhtpaOperator` so the two cannot disagree.
+`components.rhtpaPrerequisites` stays enabled and owns Postgres and
+`oidc-tpa-cli`. It creates the S3 ObjectBucketClaim and `trustify` Secret only
+in S3 mode. The CR reads `storage` from `components.rhtpaOperator`; filesystem
+mode also requires `components.rhtpaOperator.storage.size` for its PVC.
 
 Two things that will bite if you edit the CR, both in
 `components/rhtpa-operator/README.md`:
