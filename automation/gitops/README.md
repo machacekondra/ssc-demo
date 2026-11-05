@@ -173,14 +173,16 @@ first full ingest of the CVE, OSV and CSAF feeds.
 
 ### 4. Check what the seeding jobs wrote
 
-Two Applications write credentials into the pipeline namespace for you —
-between them they cover every secret the demo used to need by hand except the
-three in steps 5–7.
+The GitLab seeding job writes the SCM tokens and webhook secret into the
+pipeline namespace. The optional Quay component also creates `quay-push` when
+enabled; this install targets public Quay.io, so its push credential is created
+separately as described in RUNBOOK §7.
 
 ```sh
 oc -n gitlab        get job initialize-gitlab
+# Only when the optional in-cluster Quay component is enabled:
 oc -n quay-registry get job quay-noobaa quay-config
-oc -n tssc-app-ci   get secret scm-auth-secret scm-auth-gitops-secret gitlab-webhook-secret quay-push
+oc -n tssc-app-ci   get secret scm-auth-secret scm-auth-gitops-secret gitlab-webhook-secret
 oc -n tssc-app-ci   get sa pipeline -o jsonpath='{.secrets[*].name}{"\n"}'
 ```
 
@@ -191,17 +193,16 @@ member of exactly one project and cannot be added to another, so the gitops
 repo (which `gitops-cd-dev` pushes promotion branches to) needs its own token.
 If either Secret already exists and holds a real token, the Job leaves it
 alone — so re-running the seeding does not invalidate a credential a pipeline
-is mid-run with. The seeding also imports the gitops repository itself and
-retargets its chart's `image.repository` at this cluster's Quay (workshop
-clusters get a new domain on every rebuild, and the promotion pipeline only
-ever rewrites `image.tag`).
+is mid-run with. The seeding also imports the gitops repository and sets its
+chart's `image.repository` to the same public Quay.io image path CI publishes;
+the promotion pipeline only rewrites `image.tag`.
 
-`quay-push` holds the `tssc+remediation` robot account's token, and the last
-command should list it on the `pipeline` ServiceAccount. That link is what lets
-a PipelineRun set `output-image` and have `buildah-rhtap` push without naming a
-credential. Images land at
-`quay.<domain>/tssc/<component>:<revision>`; sign in to the console at
-`https://quay.<domain>` as `quayadmin` with `quayAdminPassword` from step 2.
+CI currently publishes to `quay.io/machacekondra`. Since the optional
+in-cluster Quay chart is disabled by default, `quay-push` must be created with a
+Quay.io robot token and linked to the `pipeline` ServiceAccount (see RUNBOOK
+§7). If the in-cluster Quay chart is enabled instead, it creates its own
+`quay-push` Secret and the `output-image` repository in the TriggerTemplate
+must be changed to that registry.
 
 ### 5. Finish the RHTPA credential
 

@@ -155,18 +155,14 @@ gitlab:
           url: https://github.com/lzspangler/spring-boot-example-gitops.git
           defaultBranch: main
 
-          # Imported repos carry the cluster they were authored on: the chart's
-          # base values hardcode a Quay host under quay.<domain>, and workshop
-          # clusters get a new domain on every rebuild. gitops-cd-dev only ever
-          # rewrites image.tag -- never repository -- so without this fix every
-          # environment would pull from a registry that no longer exists. After
-          # the import, the seeding job commits a one-line retarget of
-          # image.repository to THIS cluster's Quay.
+          # gitops-cd-dev only rewrites image.tag, so the imported chart's
+          # image.repository must match the CI output image. Keep this in sync
+          # with the output-image repository in
+          # pipelines/triggers/ci-build-triggers.yaml.
           rewriteImageRepository:
             enabled: true
             file: app/spring-boot-example/values.yaml
-            quayOrganization: tssc
-            component: spring-boot-example-application
+            repository: quay.io/machacekondra/spring-boot-example-application
 
           # A SEPARATE project access token from the application repository's:
           # a GitLab project-bot user is a member of exactly one project and

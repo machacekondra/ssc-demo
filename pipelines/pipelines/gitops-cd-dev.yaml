@@ -53,7 +53,7 @@ spec:
       description: Application commit the image was built from (MR context only).
       default: ""
     # ---------------- gitops repo ----------------
-    # Cluster-specific: like the image-registry default in
+    # Cluster-specific: like the image repository in
     # ci-build-triggers.yaml, these cannot be templated (the pipelines are
     # synced as plain YAML), so they carry this cluster's values.
     - name: gitops-url

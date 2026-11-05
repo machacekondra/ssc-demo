@@ -6,10 +6,10 @@
 # Subscription (sync wave -2) and a managed QuayRegistry with its seeding jobs
 # (-2 through 1).
 #
-# This is the registry the demo's application images are published to. The
-# pipelines' `output-image` is
-# `quay.<subdomain>/tssc/<component>:<revision>`, and `buildah-rhtap` pushes it
-# with the robot account this chart creates.
+# This optional in-cluster registry can receive application images when the
+# pipeline TriggerTemplate is configured for it. CI currently publishes to
+# `quay.io/machacekondra`; its `quay-push` credentials must match the selected
+# registry and be linked to the pipeline ServiceAccount.
 #
 # Changed from upstream:
 #

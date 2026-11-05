@@ -371,7 +371,7 @@ Run it manually the same way the finally task does:
 
 ```bash
 tkn -n tssc-app-ci pipeline start gitops-cd-dev \
-  -p image=quay.apps.<domain>/tssc/spring-boot-example-application:<sha> \
+  -p image=quay.io/machacekondra/spring-boot-example-application:<sha> \
   -p app-repo-url=https://… -p app-commit=<sha> --showlog
 ```
 
@@ -402,7 +402,7 @@ needs nothing but the image:
 
 ```bash
 tkn -n tssc-app-ci pipeline start gitops-cd-qa \
-  -p image=quay.apps.<domain>/tssc/spring-boot-example-application:<sha> --showlog
+  -p image=quay.io/machacekondra/spring-boot-example-application:<sha> --showlog
 # read the MR URL from the results, review it, merge it in GitLab
 ```
 

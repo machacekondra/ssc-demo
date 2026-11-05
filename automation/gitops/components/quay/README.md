@@ -1,11 +1,17 @@
 # quay
 
-Red Hat Quay: the registry the demo's **application images** are published to.
+Red Hat Quay: an optional in-cluster registry for the demo's **application images**.
+
+CI currently publishes application images to `quay.io/machacekondra`, as set
+directly in `pipelines/triggers/ci-build-triggers.yaml`. To use this in-cluster
+registry instead, enable the component, change that file's `output-image`
+repository, and ensure `quay-push` is seeded with this registry's credentials
+and linked to the `pipeline` ServiceAccount.
 
 Not to be confused with `quay.io/sscdemo/...`, which is where the pipelines'
 *agent* images (`ai-python`, `ai-agent-maven-aider`) are pulled from. Those stay
-on public quay.io. This chart deploys an in-cluster registry that receives the
-images the pipelines build:
+on public quay.io. When selected, this chart deploys an in-cluster registry
+that receives the images the pipelines build:
 
 ```
 quay.<domain>/tssc/<component>:<revision>

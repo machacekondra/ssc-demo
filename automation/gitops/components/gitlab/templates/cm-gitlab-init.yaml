@@ -272,19 +272,15 @@ data:
             project_id: '{{ "{{" }} r_project_{{ $repo.name | replace "-" "_" }}.json.id {{ "}}" }}'
 {{- if and $repo.rewriteImageRepository ($repo.rewriteImageRepository.enabled | default false) }}
 {{- $rewrite := $repo.rewriteImageRepository }}
-{{- $targetRepo := printf "quay.%s/%s/%s" (required "Set cluster.subdomain" $root.Values.cluster.subdomain) $rewrite.quayOrganization $rewrite.component }}
+{{- $targetRepo := default (printf "quay.%s/%s/%s" (required "Set cluster.subdomain" $root.Values.cluster.subdomain) $rewrite.quayOrganization $rewrite.component) $rewrite.repository }}
 {{- $branch := $repo.defaultBranch | default "main" }}
 
-        # ---- retarget the chart at this cluster's Quay ----------------------
-        # The imported repository carries the Quay host of the cluster its
-        # chart was authored on (workshop clusters get a new domain on every
-        # rebuild), and gitops-cd-dev only ever rewrites image.tag -- never
-        # repository. Left alone, every environment would pull from a registry
-        # that does not exist here. One commit on {{ $branch }}, made as root
-        # (the project Owner, who can commit to the protected default branch),
-        # retargets image.repository in the chart's base values for all
-        # environments. Idempotent: the commit is skipped when the line already
-        # points at this cluster.
+        # ---- align the chart's image repository with CI ---------------------
+        # gitops-cd-dev only updates image.tag. This one commit on {{ $branch }},
+        # made as root (the project Owner, who can commit to the protected
+        # default branch), sets image.repository for every environment to the
+        # image CI publishes. Idempotent: the commit is skipped when the line
+        # already points at that repository.
         - name: Read {{ $rewrite.file }} on {{ $repo.name }}
           ansible.builtin.uri:
             url: https://{{ $host }}/api/v4/projects/{{ "{{" }} project_id {{ "}}" }}/repository/files/{{ $rewrite.file | urlquery }}?ref={{ $branch }}
@@ -295,7 +291,7 @@ data:
             status_code: 200
           register: r_chart_values
 
-        - name: Retarget image.repository in {{ $repo.name }} to this cluster's Quay
+        - name: Set image.repository in {{ $repo.name }} to the CI image repository
           ansible.builtin.uri:
             url: https://{{ $host }}/api/v4/projects/{{ "{{" }} project_id {{ "}}" }}/repository/files/{{ $rewrite.file | urlquery }}
             method: PUT
@@ -303,7 +299,7 @@ data:
             body:
               branch: {{ $branch }}
               content: '{{ "{{" }} r_chart_values.json.content | b64decode | regex_replace("(?m)^(\\s*repository:\\s*).*$", "\\1{{ $targetRepo }}") {{ "}}" }}'
-              commit_message: "Point image.repository at this cluster's Quay"
+              commit_message: "Point image.repository at the CI image repository"
             headers:
               PRIVATE-TOKEN: '{{ "{{" }} root_token {{ "}}" }}'
             validate_certs: false

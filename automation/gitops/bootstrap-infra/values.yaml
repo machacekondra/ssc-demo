@@ -244,8 +244,9 @@ components:
     namespace: gitlab
     syncWave: "8"
 
-  # The registry the demo's application images are published to. The pipelines
-  # push `quay.<domain>/<organization>/<component>:<revision>`.
+  # Optional in-cluster registry for application images. CI currently publishes
+  # to quay.io/machacekondra; if this registry is enabled as the destination,
+  # update the TriggerTemplate and seed its `quay-push` credentials accordingly.
   #
   # Wave 10, alongside rhtas and rhtpa-prerequisites, so the three install in
   # parallel rather than adding their install times together. It cannot go
@@ -262,9 +263,9 @@ components:
     enabled: false
     namespace: quay-registry
     syncWave: "10"
-    # Organization the images land in, and the robot account that pushes them.
-    # Together they produce `quay.<domain>/tssc/<component>` and the Quay
-    # account `tssc+remediation`, which is what the reference cluster uses.
+    # Organization and robot account created if this in-cluster registry is
+    # used by the pipelines. Together they produce `quay.<domain>/tssc/<component>`
+    # and the Quay account `tssc+remediation`.
     organization: tssc
     robotName: remediation
     # Name of the dockerconfigjson Secret written into pipelineNamespace and

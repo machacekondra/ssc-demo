@@ -88,29 +88,6 @@ spec:
     - name: git-url
     - name: revision
     - name: component-name
-    # Quay on this cluster. The Quay operator publishes the registry at
-    # `quay.<cluster apps domain>`.
-    #
-    # MUST BE EDITED PER CLUSTER, and it is the one value here that cannot be
-    # templated: Argo CD syncs pipelines/triggers/ as PLAIN YAML
-    # (`directory.recurse: false`, no Helm), so there is no values file to
-    # inject the domain from -- the same constraint that forces
-    # agentic-issue-triggers.yaml to hardcode the `tssc-app-ci` namespace.
-    #
-    # Getting it wrong fails late and confusingly: `package` and the image
-    # build both succeed, then `buildah push` fails against a registry whose
-    # hostname the `quay-push` dockerconfigjson has no entry for, which reads
-    # as a credential problem rather than a wrong-cluster problem. Check with:
-    #   oc -n quay-registry get route quay-quay -o jsonpath='{.spec.host}'
-    #   oc -n tssc-app-ci get secret quay-push -o jsonpath='{.data.\.dockerconfigjson}' \
-    #     | base64 -d | python3 -c 'import sys,json;print(list(json.load(sys.stdin)["auths"]))'
-    # Both must agree with the value below.
-    - name: image-registry
-      default: quay.io
-    # Organization the Quay seeding job created, and which the `tssc+remediation`
-    # robot in the `quay-push` Secret is a `creator` of.
-    - name: image-organization
-      default: machacekondra
     - name: dockerfile
       default: Containerfile
     - name: subdirectory
@@ -167,8 +144,11 @@ spec:
           # Tagged with the full commit SHA rather than `latest`: the tag is
           # then an exact, immutable pointer to the source that produced it,
           # which is the whole premise of the SBOM and signature attached to it.
+          # Keep this repository aligned with the quay-push credentials and
+          # the GitOps chart's image.repository. This TriggerTemplate is plain
+          # YAML (Argo CD syncs pipelines/triggers/ with directory.recurse=false).
           - name: output-image
-            value: $(tt.params.image-registry)/$(tt.params.image-organization)/$(tt.params.component-name):$(tt.params.revision)
+            value: quay.io/machacekondra/$(tt.params.component-name):$(tt.params.revision)
           - name: dockerfile
             value: $(tt.params.dockerfile)
           - name: subdirectory

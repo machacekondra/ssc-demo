@@ -366,24 +366,45 @@ oc -n quay-registry logs job/quay-noobaa
 oc -n quay-registry logs job/quay-config
 ```
 
-## 7. Check what the seeding jobs wrote
+## 7. Check the seeded credentials and configure Quay.io push access
 
-Three credentials that used to be manual are now minted for you. Confirm them
-before going further — every later failure looks like something else.
+The GitLab seeding job creates the two SCM tokens and webhook secret. Confirm
+those before going further — later pipeline failures can otherwise look
+unrelated.
 
 ```sh
-oc -n $NS get secret scm-auth-secret scm-auth-gitops-secret gitlab-webhook-secret quay-push
-oc -n $NS get sa pipeline -o jsonpath='{.secrets[*].name}{"\n"}'
+oc -n $NS get secret scm-auth-secret scm-auth-gitops-secret gitlab-webhook-secret
 ```
-
-The last command must list `quay-push` alongside the operator's
-`pipeline-dockercfg-xxxxx`. That link is what lets a PipelineRun set
-`output-image` and have `buildah-rhtap` push without naming a credential.
 
 `scm-auth-secret` holds a GitLab **project** access token scoped to the one
 application repository, not the root PAT. `scm-auth-gitops-secret` holds a
 second one scoped to the gitops repository — a GitLab project-bot user cannot
 be shared across projects, so `gitops-cd-dev` needs its own token there.
+
+This install publishes to `quay.io/machacekondra`. Because the optional
+in-cluster Quay component is disabled, create `quay-push` with a Quay.io robot
+token that can create and push repositories in the `machacekondra` organization,
+then link it to the pipeline ServiceAccount:
+
+```sh
+read -r -s -p 'Quay.io robot token: ' QUAY_TOKEN
+printf '\n'
+oc -n "$NS" create secret docker-registry quay-push \
+  --docker-server=quay.io \
+  --docker-username='machacekondra+<robot-name>' \
+  --docker-password="$QUAY_TOKEN" \
+  --docker-email='unused@example.com' \
+  --dry-run=client -o yaml | oc apply -f -
+unset QUAY_TOKEN
+oc -n "$NS" secrets link pipeline quay-push --for=pull
+oc -n "$NS" secrets link pipeline quay-push --for=mount
+oc -n "$NS" get secret quay-push
+oc -n "$NS" get sa pipeline -o jsonpath='{.secrets[*].name}{"\n"}'
+```
+
+Keep the robot token out of this repository. The `quay-push` Secret's auth
+entry must be for `quay.io`; the build can finish locally and then fail its
+push with 401/403 if the registry host or robot permissions do not match.
 
 ## 8. Create the three remaining secrets by hand
 
@@ -483,6 +504,7 @@ to have finished.
 ```sh
 # Platform
 oc -n openshift-gitops get applications -l app.kubernetes.io/part-of=ssc-demo
+# Only when the optional in-cluster Quay component is enabled:
 oc -n quay-registry get quayregistry quay
 oc -n trusted-artifact-signer get securesign securesign
 oc -n keycloak get secret keycloak-initial-admin \
@@ -494,7 +516,7 @@ oc -n $NS get pipelines                                      # 4 agentic + maven
 oc -n $NS get eventlistener agentic-issue-commands           # ADDRESS populated
 oc get clusterinterceptors                                   # at least cel, gitlab
 
-# Credentials — all six must exist
+# Pipeline and task credentials — all must exist
 oc -n $NS get secret scm-auth-secret scm-auth-gitops-secret gitlab-webhook-secret quay-push \
                      tpa-secret ai-agent-secret maven-settings
 ```
@@ -522,7 +544,7 @@ tkn -n $NS pipeline start agentic-cve-analysis \
   -p component-name=spring-boot-example-application \
   -p git-url=https://gitlab-gitlab.${DOMAIN}/development/spring-boot-example-application.git \
   -p revision=main \
-  -p output-image=quay.${DOMAIN}/tssc/spring-boot-example-application:smoke \
+  -p output-image=quay.io/machacekondra/spring-boot-example-application:smoke \
   -p git-host=gitlab-gitlab.${DOMAIN} \
   -w name=workspace,volumeClaimTemplateFile=/tmp/ws.yaml \
   -w name=maven-settings,secret=maven-settings \
@@ -530,8 +552,8 @@ tkn -n $NS pipeline start agentic-cve-analysis \
   --showlog
 ```
 
-Success looks like: the image appears at `quay.${DOMAIN}/tssc/…` (the `tssc`
-repository is created on first push by the robot's `creator` team role), the
+Success looks like: the image appears at
+`quay.io/machacekondra/spring-boot-example-application:smoke`, the
 SBOM uploads to RHTPA, and GitLab issues are opened with the recommended
 Lightwell backport.
 

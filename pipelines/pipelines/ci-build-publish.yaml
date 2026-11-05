@@ -54,7 +54,7 @@ spec:
       type: string
       description: >-
         Fully qualified image to publish, e.g.
-        quay.apps.<cluster domain>/tssc/spring-boot-example-application:<sha>.
+        quay.io/machacekondra/spring-boot-example-application:<sha>.
         The push is authenticated by the `quay-push` Secret linked to the
         `pipeline` ServiceAccount -- no credential is named here.
     - name: path-context
