@@ -10,5 +10,5 @@ metadata:
     argocd.argoproj.io/sync-wave: "-1"
 data:
   ca.crt: |
-{{ .Values.tls.additionalTrustAnchorPem | nindent 4 }}
+{{ .Values.tls.additionalTrustAnchorPem | indent 4 }}
 {{- end }}
