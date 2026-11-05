@@ -39,8 +39,23 @@ spec:
   collector: {}
   image: {}
   rust: {}
+  {{ if .Values.tls.additionalTrustAnchorPem }}
   tls:
-{{ toYaml .Values.tls | nindent 4 }}
+    additionalTrustAnchor: /etc/rhtpa/trust/ca.crt
+  extraVolumes:
+    - name: additional-trust-anchor
+      configMap:
+        name: rhtpa-additional-trust-anchor
+        items:
+          - key: ca.crt
+            path: ca.crt
+  extraVolumeMounts:
+    - name: additional-trust-anchor
+      mountPath: /etc/rhtpa/trust
+      readOnly: true
+  {{ else }}
+  tls: {}
+  {{ end }}
   createDatabase: {}
   migrateDatabase: {}
   infrastructure:

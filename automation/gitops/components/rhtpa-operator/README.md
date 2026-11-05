@@ -32,8 +32,9 @@ Filesystem mode does not create `trustify`; it stores documents on a PVC. Set
 
 If the Keycloak issuer uses a cluster-local ingress certificate, set
 `components.rhtpaOperator.tls.additionalTrustAnchor` in the private bootstrap
-values file to the ingress CA PEM. The operator passes it to RHTPA for outbound
-OIDC TLS validation.
+values file to the ingress CA PEM. The chart stores the certificate in a
+ConfigMap, mounts it into RHTPA workloads, and configures the trust-anchor
+setting with the mounted file path for outbound OIDC TLS validation.
 
 ## Things worth knowing before you edit it
 

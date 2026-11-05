@@ -1,0 +1,14 @@
+{{- if .Values.tls.additionalTrustAnchorPem }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rhtpa-additional-trust-anchor
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "rhtpa-operator.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+data:
+  ca.crt: |
+{{ .Values.tls.additionalTrustAnchorPem | nindent 4 }}
+{{- end }}

@@ -21,9 +21,11 @@ domain: ""
 
 namespace: trusted-profile-analyzer
 
-# Additional CA certificates trusted for outbound TLS, including the OIDC
-# issuer when it uses a cluster-local ingress certificate.
-tls: {}
+# Optional PEM CA bundle trusted for outbound TLS, including the OIDC issuer
+# when it uses a cluster-local ingress certificate. The chart mounts this PEM
+# and sets the RHTPA trust-anchor option to the mounted file path.
+tls:
+  additionalTrustAnchorPem: ""
 
 subscription:
   # Must track the RHTPA major you want. stable-v3 is RHTPA 3.x, which is the
