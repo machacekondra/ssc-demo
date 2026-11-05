@@ -90,6 +90,12 @@ spec:
           # custom SCC in openshift-extras.yaml. For prod, use an external DB.
           postgresql:
             enabled: true
+            # The lab workers are already near their CPU request capacity; keep
+            # the bundled demo database schedulable with a smaller request.
+            primary:
+              resources:
+                requests:
+                  cpu: 100m
             # PIN the DB credentials to a pre-created Secret (openshift-extras.yaml).
             # CRITICAL: without this, the bundled bitnami PostgreSQL generates a
             # RANDOM password into Secret `artifactory-postgresql` on every Helm

@@ -1,0 +1,30 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: trusted-ca
+  namespace: tssc-app-ci
+  labels:
+    app.kubernetes.io/part-of: maven-build-ci
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
+data:
+  ca-bundle.crt: |
+    -----BEGIN CERTIFICATE-----
+    MIIDDDCCAfSgAwIBAgIBATANBgkqhkiG9w0BAQsFADAmMSQwIgYDVQQDDBtpbmdy
+    ZXNzLW9wZXJhdG9yQDE3ODgzNDgxNzMwHhcNMjYwOTAyMTEyMjUzWhcNMjgwOTAx
+    MTEyMjU0WjAmMSQwIgYDVQQDDBtpbmdyZXNzLW9wZXJhdG9yQDE3ODgzNDgxNzMw
+    ggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQDq+X5uMIP5pPwsGl058F+M
+    DFoXBKDfjnjcYhRWwC5BLR5pyoPTf7u8QuWJoPVdqvd/G4HIN6keOlFtFZhjqhoU
+    QxATdYSRwy+X0FYiCxZXvi97eZt/dfWUl3kLRq/rNYSLiCQMgx6PTF38ziiHlNmf
+    V7S7hxG7QeAX+7nrO7A84yrzpl3BVC9UBqwGyR+KpU70VQFx9bnznYdgeCNu1XTG
+    dlBBs3SGwuIgori4vub5QzwjHxbUSdetrh4cr8mzmvtUsZd8tTGsrXJoAbq+leaM
+    m6kcz+PLVBxjytZ3lKtIKWLHHmNQk43X0jA2ZXuxjaQ0hiB0ByuulhMEwxI2UiLV
+    AgMBAAGjRTBDMA4GA1UdDwEB/wQEAwICpDASBgNVHRMBAf8ECDAGAQH/AgEAMB0G
+    A1UdDgQWBBQUH20/v29c1GFsSRZVh+vLLTfjYjANBgkqhkiG9w0BAQsFAAOCAQEA
+    Yvq2PM/eVSp9DYvkObQRhc1AJoUZHFFDbecwbA8bva4aUBuIDI7Ycy9Dv2bdze01
+    tRtYyDZTABVUyt8lFzTQ+/Scv4oltbBZ7REFCUTSnVCJ71GFQTBViGI+3pCxsOgw
+    2kmTr3WK0Xw1Q4QOCtG9X1sfRDt92fodX6NVSzaqHSpI8J7GrNb2jjkjKw0jdJk2
+    aBSJEAK9x2oIBpbCIuD0ibzwIb5JgREiiYFtMutAvaMsmLgORabs8Q7G4cGNjis1
+    6dNuunVjzyflPA9A+BEGykXCOXQbbNphTf4ppGN9fs23Ry1G61d71ugtuE9zmQym
+    Te7Pry4zruH+uFRwy+q2yw==
+    -----END CERTIFICATE-----

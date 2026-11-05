@@ -12,10 +12,12 @@ which is what the reference cluster runs.
 runs it once GitLab is up. In order:
 
 1. Waits for the pod, then for `/api/v4/projects` to answer 200.
-2. Mints a root personal access token by running `./bin/rails console` inside
-   the GitLab pod, and stores it as the Secret `root-user-personal-token`.
-   There is no API for this — a fresh GitLab has no token to authenticate the
-   creation of the first token with.
+2. Ensures the default project limit and root account are seeded, then mints a
+   root personal access token with `./bin/rails runner` inside the GitLab pod.
+   It stores the token in `root-user-personal-token`; there is no API for
+   creating the first token because GitLab has no existing credential to
+   authenticate that request with. Retries reuse the stored token instead of
+   creating another root token.
 3. Turns on `import_sources` (needed for step 5) and
    `allow_local_requests_from_web_hooks_and_services` (the webhook target is a
    Route on this same cluster, which GitLab otherwise refuses to call).

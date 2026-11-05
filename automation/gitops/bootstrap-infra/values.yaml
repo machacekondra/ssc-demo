@@ -328,7 +328,7 @@ components:
     storage:
       # s3 (needs ODF) or filesystem. Also read by rhtpaPrerequisites, which
       # only raises the ObjectBucketClaim in s3 mode.
-      type: s3
+      type: filesystem
       bucket: trustify
       # NooBaa's S3 endpoint. Empty derives
       # `https://s3-openshift-storage.<domain>:443`.

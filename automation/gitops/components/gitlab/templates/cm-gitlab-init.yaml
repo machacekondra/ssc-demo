@@ -62,13 +62,27 @@ data:
           delay: 10
           until: r_liveness.status == 200
 
+        - name: Check for an existing root user personal token
+          kubernetes.core.k8s_info:
+            api_version: v1
+            kind: Secret
+            name: root-user-personal-token
+            namespace: '{{ "{{" }} gitlab_namespace {{ "}}" }}'
+          register: r_existing_root_token
+
         - name: Generate root user personal token
           shell: |
+            set -e
             POD=$(oc get pod -l app=gitlab -n {{ $.Release.Namespace }} --no-headers | awk '{print $1}')
+            test -n "$POD"
             oc exec $POD -n {{ $.Release.Namespace }} -- /bin/sh -c /scripts/create-root-pat.sh
             ROOT_PAT=$(oc exec $POD -n {{ $.Release.Namespace }} -- /bin/sh -c "cat /tmp/root.pat")
-            oc delete secret root-user-personal-token -n {{ $.Release.Namespace }} --ignore-not-found
-            oc create secret generic root-user-personal-token --from-literal=token=$ROOT_PAT -n {{ $.Release.Namespace }}
+            test -n "$ROOT_PAT"
+            oc create secret generic root-user-personal-token --from-literal="token=$ROOT_PAT" -n {{ $.Release.Namespace }} --dry-run=client -o yaml | oc apply -f -
+            unset ROOT_PAT
+          when: >-
+            r_existing_root_token.resources | length == 0 or
+            r_existing_root_token.resources[0].data.token | default('') | length == 0
 
         - name: Retrieve root token
           kubernetes.core.k8s_info:
