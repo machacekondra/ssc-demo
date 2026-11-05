@@ -39,7 +39,8 @@ spec:
   collector: {}
   image: {}
   rust: {}
-  tls: {}
+  tls:
+{{ toYaml .Values.tls | nindent 4 }}
   createDatabase: {}
   migrateDatabase: {}
   infrastructure:

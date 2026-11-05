@@ -21,6 +21,10 @@ domain: ""
 
 namespace: trusted-profile-analyzer
 
+# Additional CA certificates trusted for outbound TLS, including the OIDC
+# issuer when it uses a cluster-local ingress certificate.
+tls: {}
+
 subscription:
   # Must track the RHTPA major you want. stable-v3 is RHTPA 3.x, which is the
   # first line Exploit Intelligence supports.

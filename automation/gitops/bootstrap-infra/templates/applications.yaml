@@ -547,6 +547,10 @@ spec:
         createOperatorGroup: {{ $ro.createOperatorGroup }}
         subscription:
           channel: {{ $ro.channel | quote }}
+        {{- with $ro.tls.additionalTrustAnchor }}
+        tls:
+          additionalTrustAnchor: {{ . | quote }}
+        {{- end }}
         trustedProfileAnalyzer:
           routeTimeout: {{ $ro.routeTimeout | quote }}
           storage:

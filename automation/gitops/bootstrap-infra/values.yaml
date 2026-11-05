@@ -326,6 +326,11 @@ components:
     # The Route is GENERATED from an Ingress, so the annotation goes on the
     # Ingress via the CR's ingress.additionalAnnotations.
     routeTimeout: 300s
+    tls:
+      # Optional PEM CA bundle for outbound TLS, such as a self-signed
+      # cluster ingress certificate used by Keycloak. Set in the private
+      # values file rather than committing a cluster-specific certificate.
+      additionalTrustAnchor: ""
     storage:
       # s3 (needs ODF) or filesystem. Filesystem storage uses a PVC of this
       # size; 50Gi is a small demo allocation with some headroom.

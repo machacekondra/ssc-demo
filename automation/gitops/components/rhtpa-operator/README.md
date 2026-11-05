@@ -30,6 +30,11 @@ Filesystem mode does not create `trustify`; it stores documents on a PVC. Set
 `trustedProfileAnalyzer.storage.size` for that PVC (the demo defaults to
 `50Gi`). That is what makes switching a swap rather than a rebuild.
 
+If the Keycloak issuer uses a cluster-local ingress certificate, set
+`components.rhtpaOperator.tls.additionalTrustAnchor` in the private bootstrap
+values file to the ingress CA PEM. The operator passes it to RHTPA for outbound
+OIDC TLS validation.
+
 ## Things worth knowing before you edit it
 
 **The CR is unvalidated.** The CRD declares `spec` as a bare object with
