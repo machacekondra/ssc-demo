@@ -192,7 +192,8 @@ data:
   AI_MODEL:    "gpt-6-luna"
   AI_BASE_URL: "https://api.openai.com/v1"
   AI_TLS_INSECURE: "false"
-  AI_CA_BUNDLE: ""
+  AI_CA_BUNDLE: "/tekton-custom-certs/ca-bundle.crt"
+  SSL_VERIFY: "/tekton-custom-certs/ca-bundle.crt"
 ```
 
 `AI_PROVIDER` selects the API family; `AI_AGENT` selects the coding-agent CLI.
@@ -209,11 +210,11 @@ expected key in `ai-agent-secret`. `AI_MODEL` may be a bare model id or a full
 LiteLLM model string such as `ollama_chat/granite3.3:8b`. `agent-image` already
 defaults to `ai-agent-maven-aider`, so no pipeline edit is needed.
 
-The direct OpenAI default keeps TLS verification enabled and leaves
-`SSL_VERIFY` unset. For a private or self-hosted endpoint using a custom CA,
-populate `ai-endpoint-ca`, set `AI_CA_BUNDLE` to its mounted path, and set
-`SSL_VERIFY` to the same path for aider tasks. Disabling certificate
-verification is for demo use only.
+The direct OpenAI default keeps TLS verification enabled and uses the cluster's
+mounted trust bundle at `/tekton-custom-certs/ca-bundle.crt` for the Python SDK
+and aider. For a private endpoint whose CA is not in that bundle, populate
+`ai-endpoint-ca` and set `AI_CA_BUNDLE` and `SSL_VERIFY` to its mounted path.
+Disabling certificate verification is for demo use only.
 
 **Anthropic + Claude Code** — set `AI_PROVIDER: anthropic`,
 `AI_AGENT: claude-code`, `AI_MODEL: claude-opus-5`, clear `AI_BASE_URL`, and set

@@ -46,19 +46,13 @@
 # contract in README-ai-remediation.md and set AGENT_IMAGE / AI_PYTHON_IMAGE on
 # the PipelineRun -- this ConfigMap stays the single config surface.
 #
-# TLS trust for self-hosted endpoints
+# TLS trust for private endpoints and TLS-inspecting egress proxies
 # -----------------------------------
-# A self-hosted AI_BASE_URL served over HTTPS with a private CA (internal PKI or
-# a TLS-reencrypting egress proxy) fails the SDK handshake with
-# "CERTIFICATE_VERIFY_FAILED: unable to get local issuer certificate", because
-# the OpenAI/Anthropic Python SDKs verify only against certifi's public roots and
-# ignore SSL_CERT_FILE/SSL_VERIFY. Two ways to fix it:
-#   * Trust the CA (recommended). Create a ConfigMap holding the PEM:
-#       oc create configmap ai-endpoint-ca --from-file=ca-bundle.crt=<your-ca>.pem
-#     (or add the label config.openshift.io/inject-trusted-cabundle=true to have
-#     OpenShift populate ca-bundle.crt with the cluster + proxy trust bundle),
-#     then set AI_CA_BUNDLE below. The ai-select-cve task mounts this ConfigMap
-#     (optional) at /etc/ai-ca.
+# The OpenAI/Anthropic SDKs need the CA bundle passed to their HTTP client.
+# OpenShift Pipelines mounts its cluster trust bundle at
+# /tekton-custom-certs/ca-bundle.crt; point AI_CA_BUNDLE there when egress TLS
+# is intercepted. For a different private CA, create ai-endpoint-ca with
+# ca-bundle.crt and set AI_CA_BUNDLE to /etc/ai-ca/ca-bundle.crt instead.
 #   * Disable verification (AI_TLS_INSECURE, demo/dev ONLY -- never production).
 # aider/litellm reach the endpoint differently: they honor SSL_VERIFY, so for the
 # aider tasks add SSL_VERIFY (a CA path, or "False" for demo-insecure) as an extra
@@ -87,11 +81,12 @@ data:
   AI_BASE_URL: "https://api.openai.com/v1"
   # Effort / verbosity knob where supported (low|medium|high|xhigh|max).
   AI_EFFORT: "high"
-  # OpenAI serves a publicly trusted certificate; keep verification enabled.
+  # Keep verification enabled and trust the cluster's injected egress CA bundle.
   AI_TLS_INSECURE: "false"
-  # Optional private CA path for self-hosted endpoints; empty uses normal TLS
-  # verification. Leave SSL_VERIFY unset so aider also verifies certificates.
-  AI_CA_BUNDLE: ""
+  # Tekton mounts this ConfigMap at /tekton-custom-certs in each TaskRun pod.
+  AI_CA_BUNDLE: "/tekton-custom-certs/ca-bundle.crt"
+  # aider/litellm use SSL_VERIFY for custom trust instead of AI_CA_BUNDLE.
+  SSL_VERIFY: "/tekton-custom-certs/ca-bundle.crt"
   # AWS_REGION / VERTEX_PROJECT_ID / VERTEX_REGION are intentionally absent:
   # they apply only to AI_PROVIDER=bedrock|vertex. Re-add them (see the header)
   # if you switch provider.
