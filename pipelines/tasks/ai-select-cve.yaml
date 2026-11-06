@@ -401,12 +401,28 @@ spec:
                         {"role": "user", "content": user},
                     ],
                 )
+
+            def _schema_unsupported(exc):
+                # Do not turn a connection/TLS/auth error into a misleading
+                # JSON Schema fallback. Only fall back for an explicit HTTP 400
+                # saying this endpoint/model does not support JSON Schema output.
+                if getattr(exc, "status_code", None) != 400:
+                    return False
+                detail = (str(getattr(exc, "body", "")) + " " + str(exc)).lower()
+                mentions_format = any(term in detail for term in
+                                      ("json_schema", "response_format", "structured output"))
+                says_unsupported = any(term in detail for term in
+                                       ("not supported", "unsupported", "does not support"))
+                return mentions_format and says_unsupported
+
             try:
                 resp = openai_call({
                     "type": "json_schema",
                     "json_schema": {"name": "cve_selection", "schema": schema, "strict": True},
                 })
             except Exception as e:
+                if not _schema_unsupported(e):
+                    raise
                 print(f"json_schema not supported ({e}); retrying with json_object", file=sys.stderr)
                 resp = openai_call({"type": "json_object"})
             text = resp.choices[0].message.content or "{}"

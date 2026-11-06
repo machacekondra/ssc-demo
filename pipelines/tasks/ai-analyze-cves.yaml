@@ -71,7 +71,8 @@ spec:
       type: string
       description: >-
         Combined thinking+output token budget per model call (Anthropic counts
-        both against max_completion_tokens). Raise if a batch's output is cut off mid-JSON.
+        both against max_tokens; OpenAI uses max_completion_tokens). Raise if a
+        batch's output is cut off mid-JSON.
       default: "8000"
   workspaces:
     - name: workspace
@@ -445,12 +446,28 @@ spec:
                             {"role": "user", "content": user},
                         ],
                     )
+
+                def _schema_unsupported(exc):
+                    # A network/TLS failure says nothing about response_format.
+                    # Only fall back for an HTTP 400 that explicitly says this
+                    # endpoint/model does not support JSON Schema output.
+                    if getattr(exc, "status_code", None) != 400:
+                        return False
+                    detail = (str(getattr(exc, "body", "")) + " " + str(exc)).lower()
+                    mentions_format = any(term in detail for term in
+                                          ("json_schema", "response_format", "structured output"))
+                    says_unsupported = any(term in detail for term in
+                                           ("not supported", "unsupported", "does not support"))
+                    return mentions_format and says_unsupported
+
                 try:
                     resp = openai_call({
                         "type": "json_schema",
                         "json_schema": {"name": "cve_analysis", "schema": schema, "strict": True},
                     })
                 except Exception as e:
+                    if not _schema_unsupported(e):
+                        raise
                     print("json_schema not supported (%s); retrying with json_object" % e,
                           file=sys.stderr)
                     resp = openai_call({"type": "json_object"})
@@ -478,13 +495,13 @@ spec:
                     return call_model(user)
                 except RETRYABLE as e:
                     if attempt == MODEL_MAX_RETRIES:
-                        print("model call failed after %d attempts: %s"
-                              % (attempt, e), file=sys.stderr)
+                        print("model call failed after %d attempts: %s (cause=%r)"
+                              % (attempt, e, e.__cause__), file=sys.stderr)
                         raise
                     wait = RETRY_BASE_SECS * (2 ** (attempt - 1)) + random.uniform(0, 1)
                     print("transient model error (%s); backing off %.1fs then "
-                          "retry %d/%d" % (type(e).__name__, wait, attempt + 1,
-                                           MODEL_MAX_RETRIES), file=sys.stderr)
+                          "retry %d/%d (cause=%r)" % (type(e).__name__, wait, attempt + 1,
+                                           MODEL_MAX_RETRIES, e.__cause__), file=sys.stderr)
                     time.sleep(wait)
 
         # Accept {"decisions": [...]} OR a bare [...] (some backends drop the
