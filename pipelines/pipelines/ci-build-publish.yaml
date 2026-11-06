@@ -9,22 +9,18 @@ metadata:
   name: ci-build-publish
 spec:
   # Continuous integration for the application repository: every merge to the
-  # default branch builds the source, builds and publishes the container image
-  # to the in-cluster Quay, attaches its SBOM, and uploads that SBOM to RHTPA.
+  # default branch builds the source, publishes the container image to
+  # quay.io/machacekondra, attaches its SBOM, and uploads that SBOM to RHTPA.
   #
   # The build -> push -> SBOM chain is the same one agentic-cve-analysis uses
-  # (clone -> maven package -> buildah-rhtap -> upload-sbom-to-rhtpa); what is
-  # deliberately NOT here is everything downstream of the SBOM. No vulnerability
-  # analysis, no Conforma gate, no AI, no issues. Those belong to the agentic
-  # pipelines, which run on their own cadence against the same image. CI stays
-  # fast and either produces a published image or fails.
+  # (clone -> maven package -> buildah-rhtap -> upload-sbom-to-rhtpa). After
+  # that succeeds, a finally task starts agentic-cve-analysis as a separate
+  # PipelineRun; it performs vulnerability analysis and opens issues for
+  # fixable CVEs. That run rebuilds the same commit and image tag.
   #
-  # The one thing downstream of the build that IS here: a finally task starts
-  # the gitops-cd-dev pipeline after a successful build, promoting the freshly
-  # published image tag into the gitops repo's dev values file (MR + auto
-  # merge). No vulnerability analysis, no Conforma gate, no AI, no issues --
-  # those belong to the agentic pipelines, which run on their own cadence
-  # against the same image.
+  # After success, separate finally tasks start gitops-cd-dev to promote the
+  # image tag into the gitops repo's dev values file (MR + auto merge), and
+  # agentic-cve-analysis to scan the commit and open issues for fixable CVEs.
   #
   # Two defaults differ from the agentic pipelines because they matter for an
   # image that is meant to survive:
@@ -157,6 +153,13 @@ spec:
         finally task creates its PipelineRun, which opens and auto-merges an MR
         bumping image.tag in the gitops repo's dev values file). Set "false" to
         build and publish without promoting to dev.
+      default: "true"
+    - name: run-cve-analysis
+      type: string
+      description: >-
+        "true" starts agentic-cve-analysis after the image build and SBOM upload
+        succeed. That separate PipelineRun rebuilds the same commit, scans it,
+        and opens issues for fixable CVEs. Set "false" to skip analysis.
       default: "true"
   results:
     - name: IMAGE_URL
@@ -352,8 +355,43 @@ spec:
           operator: in
           values: ["succeeded"]
 
-  # NOTE: the finally task start-gitops-cd-dev is pinned to tekton-triggers-sa
-  # via `taskRunSpecs` on the PipelineRun, in triggers/ci-build-triggers.yaml.
+    # Start CVE analysis separately so its scan and issue creation are visible
+    # as their own PipelineRun. It only starts once CI has published the image
+    # and uploaded its SBOM successfully.
+    - name: start-agentic-cve-analysis
+      params:
+        - name: COMPONENT_NAME
+          value: $(params.component-name)
+        - name: GIT_URL
+          value: $(params.git-url)
+        - name: REVISION
+          value: $(tasks.clone-repository.results.commit)
+        - name: OUTPUT_IMAGE
+          value: $(params.output-image)
+        - name: DOCKERFILE
+          value: $(params.dockerfile)
+        - name: PATH_CONTEXT
+          value: $(params.path-context)
+        - name: SUBDIRECTORY
+          value: $(params.subdirectory)
+        - name: TRUSTIFICATION_SECRET_NAME
+          value: $(params.trustification-secret-name)
+      taskRef:
+        kind: Task
+        name: start-agentic-cve-analysis
+      when:
+        - input: "$(params.run-cve-analysis)"
+          operator: in
+          values: ["true"]
+        - input: "$(tasks.build-container.status)"
+          operator: in
+          values: ["succeeded"]
+        - input: "$(tasks.upload-sbom-to-rhtpa.status)"
+          operator: in
+          values: ["succeeded"]
+
+  # NOTE: the PipelineRun-launching finally tasks are pinned to
+  # tekton-triggers-sa via taskRunSpecs in ci-build-triggers.yaml.
   # taskRunSpecs is a PipelineRun-only field: no Tekton Pipeline CRD declares
   # it, so the API server silently prunes it from here (syncs "succeed" but
   # Argo CD stays OutOfSync forever). See the note there for the RBAC

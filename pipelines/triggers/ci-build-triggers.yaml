@@ -112,9 +112,9 @@ spec:
         # looks like a registry problem.
         taskRunTemplate:
           serviceAccountName: pipeline
-        # The pipeline's finally task start-gitops-cd-dev talks to the
-        # Kubernetes API to create a PipelineRun. It runs as tekton-triggers-sa
-        # (the same SA the EventListeners use, whose RBAC lives in
+        # The PipelineRun-launching finally tasks talk to the Kubernetes API
+        # to create child PipelineRuns. They run as tekton-triggers-sa (the
+        # same SA the EventListeners use, whose RBAC lives in
         # agentic-issue-triggers.yaml) because that SA already holds
         # create-pipelineruns in this namespace; the run's default `pipeline`
         # SA above is not guaranteed to. If you run ci-build-publish without
@@ -131,6 +131,8 @@ spec:
         # v1.15) declares in its CRD.
         taskRunSpecs:
           - pipelineTaskName: start-gitops-cd-dev
+            serviceAccountName: tekton-triggers-sa
+          - pipelineTaskName: start-agentic-cve-analysis
             serviceAccountName: tekton-triggers-sa
         timeouts:
           pipeline: "1h0m0s"
