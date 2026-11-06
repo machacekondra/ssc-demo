@@ -183,31 +183,37 @@ The pipelines read their backend from the `ai-agent-config` ConfigMap, which
 `selfHeal: true`**. There is no Helm value for it. An `oc edit` on the live
 ConfigMap is reverted within minutes, so this choice is a commit.
 
-**aider + an OpenAI-compatible endpoint** (gpt-oss, Granite, vLLM, Ollama,
-OpenShift AI, watsonx) — **this is the committed default**:
+**Direct OpenAI API + aider** — **this is the committed default**:
 
 ```yaml
 data:
   AI_PROVIDER: "openai"
   AI_AGENT:    "aider"
-  AI_MODEL:    "gpt-oss-120b"
-  AI_BASE_URL: "https://maas-rhdp.apps.maas.redhatworkshops.io/v1"
+  AI_MODEL:    "gpt-6-luna"
+  AI_BASE_URL: "https://api.openai.com/v1"
+  AI_TLS_INSECURE: "false"
+  AI_CA_BUNDLE: ""
 ```
 
-Change `AI_MODEL`/`AI_BASE_URL` for a different endpoint. `AI_MODEL` may be a
-bare id (litellm assumes the `openai/` provider) or a full litellm string such
-as `ollama_chat/granite3.3:8b`. `agent-image` already defaults to
-`ai-agent-maven-aider`, so no pipeline edit is needed.
+`AI_PROVIDER` selects the API family; `AI_AGENT` selects the coding-agent CLI.
+The `ai-analyze-cves` task uses the OpenAI SDK directly, so it reads
+`AI_MODEL`, `AI_BASE_URL`, and `OPENAI_API_KEY` from the ConfigMap and Secret.
+GPT-6 Luna supports Chat Completions and structured outputs; see the [model
+docs](https://developers.openai.com/api/docs/models/gpt-6-luna). Keep the
+Secret's `OPENAI_API_KEY` as an OpenAI API key for this endpoint. OpenAI's model
+list for the key is available at `https://api.openai.com/v1/models`.
 
-The shipped default also sets `AI_TLS_INSECURE: "true"` and
-`SSL_VERIFY: "False"`. That is **demo-only**. It is on because the SDKs verify
-against certifi's public roots only, and the `ai-python` image fails the
-handshake with `CERTIFICATE_VERIFY_FAILED: unable to get local issuer
-certificate` against this endpoint even where plain `curl` from the same UBI9
-base succeeds. For anything beyond a demo, trust the CA instead: populate the
-`ai-endpoint-ca` ConfigMap, set `AI_CA_BUNDLE` to the mounted path, and set
-`SSL_VERIFY` to the same path for the aider tasks. Plain in-cluster
-`http://…svc` sidesteps TLS entirely.
+For a different OpenAI-compatible endpoint such as MaaS, vLLM, Ollama, OpenShift
+AI, or watsonx, change both `AI_MODEL` and `AI_BASE_URL` and put that endpoint's
+expected key in `ai-agent-secret`. `AI_MODEL` may be a bare model id or a full
+LiteLLM model string such as `ollama_chat/granite3.3:8b`. `agent-image` already
+defaults to `ai-agent-maven-aider`, so no pipeline edit is needed.
+
+The direct OpenAI default keeps TLS verification enabled and leaves
+`SSL_VERIFY` unset. For a private or self-hosted endpoint using a custom CA,
+populate `ai-endpoint-ca`, set `AI_CA_BUNDLE` to its mounted path, and set
+`SSL_VERIFY` to the same path for aider tasks. Disabling certificate
+verification is for demo use only.
 
 **Anthropic + Claude Code** — set `AI_PROVIDER: anthropic`,
 `AI_AGENT: claude-code`, `AI_MODEL: claude-opus-5`, clear `AI_BASE_URL`, and set

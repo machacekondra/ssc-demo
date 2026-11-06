@@ -72,9 +72,8 @@ metadata:
   labels:
     app.kubernetes.io/part-of: maven-build-ci
 data:
-  # gpt-oss-120b on the Red Hat MaaS endpoint, driven by aider. Matches the
-  # `agent-image` default on the pipelines (ai-agent-maven-aider), so no
-  # PipelineRun override is needed.
+  # Direct OpenAI API, driven by aider. Matches the `agent-image` default on
+  # the pipelines (ai-agent-maven-aider), so no PipelineRun override is needed.
   #
   # The companion Secret must supply OPENAI_API_KEY and must NOT define
   # AI_PROVIDER: the AI tasks set
@@ -83,27 +82,16 @@ data:
   # overrides whatever is set here.
   AI_PROVIDER: "openai"
   AI_AGENT: "aider"
-  AI_MODEL: "gpt-oss-120b"
-  # The model's /v1 endpoint (AI_PROVIDER=openai or gateway).
-  AI_BASE_URL: "https://maas-rhdp.apps.maas.redhatworkshops.io/v1"
-  # Effort / verbosity knob where supported (low|medium|high|xhigh|max). For
-  # gpt-oss this maps to reasoning effort; ignored by models that don't take it.
+  AI_MODEL: "gpt-6-luna"
+  # Direct OpenAI API endpoint. The companion Secret must contain an OpenAI API key.
+  AI_BASE_URL: "https://api.openai.com/v1"
+  # Effort / verbosity knob where supported (low|medium|high|xhigh|max).
   AI_EFFORT: "high"
-  # Demo/dev ONLY -- disables TLS certificate verification for the SDK calls.
-  #
-  # Why it is on: the SDKs verify against certifi's public roots only, and the
-  # ai-python image hit "CERTIFICATE_VERIFY_FAILED: unable to get local issuer
-  # certificate" against this endpoint even though plain curl from the same
-  # UBI9 base succeeded. For anything but a demo, trust the CA properly instead:
-  # populate the ai-endpoint-ca ConfigMap and set AI_CA_BUNDLE (plus SSL_VERIFY
-  # to the same path for the aider tasks) -- see the TLS notes above.
-  AI_TLS_INSECURE: "true"
-  # Path to a CA PEM for the SDKs; empty = certifi defaults. Ignored while
-  # AI_TLS_INSECURE is "true".
+  # OpenAI serves a publicly trusted certificate; keep verification enabled.
+  AI_TLS_INSECURE: "false"
+  # Optional private CA path for self-hosted endpoints; empty uses normal TLS
+  # verification. Leave SSL_VERIFY unset so aider also verifies certificates.
   AI_CA_BUNDLE: ""
-  # aider/litellm do not read AI_TLS_INSECURE -- they honour SSL_VERIFY, which
-  # takes a CA path or "False" for demo-insecure. Keep the two consistent.
-  SSL_VERIFY: "False"
   # AWS_REGION / VERTEX_PROJECT_ID / VERTEX_REGION are intentionally absent:
   # they apply only to AI_PROVIDER=bedrock|vertex. Re-add them (see the header)
   # if you switch provider.
