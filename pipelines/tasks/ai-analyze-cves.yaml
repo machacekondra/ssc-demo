@@ -71,7 +71,7 @@ spec:
       type: string
       description: >-
         Combined thinking+output token budget per model call (Anthropic counts
-        both against max_tokens). Raise if a batch's output is cut off mid-JSON.
+        both against max_completion_tokens). Raise if a batch's output is cut off mid-JSON.
       default: "8000"
   workspaces:
     - name: workspace
@@ -438,7 +438,7 @@ spec:
                 def openai_call(response_format):
                     return oai.chat.completions.create(
                         model=model,
-                        max_tokens=MAX_TOKENS,
+                        max_completion_tokens=MAX_TOKENS,
                         response_format=response_format,
                         messages=[
                             {"role": "system", "content": system},

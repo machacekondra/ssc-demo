@@ -394,7 +394,7 @@ spec:
             def openai_call(response_format):
                 return oai.chat.completions.create(
                     model=model,
-                    max_tokens=4000,
+                    max_completion_tokens=4000,
                     response_format=response_format,
                     messages=[
                         {"role": "system", "content": system},
