@@ -58,9 +58,6 @@ spec:
       value: development/spring-boot-example-application
     - name: PACKAGE
       value: org.apache.commons:commons-lang3
-    # Optional: require this exact Lightwell version and its POM to exist.
-    - name: FIXED_VERSION
-      value: 3.14.0.rhlw-00001
   workspaces:
     - name: maven-settings
       secret:
@@ -74,6 +71,11 @@ Success produces `STATUS=validated`, an Artifactory metadata summary, and
 Renovate's lookup output. No branches, dashboards, or merge requests are created.
 The Task fails for an unknown repository, missing/mismatched credentials,
 unavailable target version, TLS errors, or Renovate errors.
+
+To validate a particular backport as well, add the `FIXED_VERSION` parameter
+using a version from the metadata summary. The task requires both that metadata
+entry and the version's POM to be available. Do not assume an old demo fixture's
+version exists in the current Lightwell catalog.
 
 ## Reuse for the remediation action
 

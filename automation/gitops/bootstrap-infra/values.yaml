@@ -22,6 +22,8 @@
 #    8  gitlab                   Independent of Keycloak (root auth, not OIDC), but slow:
 #                                the seeding job imports a repository from GitHub. Started
 #                                early so it overlaps the operator installs.
+#    9  renovate                 On-demand runtime configuration and read-only
+#                                validation Task, using the GitLab/Maven Secrets.
 #   10  quay                     The application image registry. Needs the pipeline
 #                                namespace and its `pipeline` ServiceAccount (wave 3-5) to
 #                                exist before it can write the push Secret, and NooBaa in
