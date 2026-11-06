@@ -1,0 +1,49 @@
+{{- if .Values.components.renovate.enabled }}
+{{- $r := .Values.components.renovate }}
+{{- $domain := required "Set deployer.domain to the cluster's apps subdomain" .Values.deployer.domain }}
+{{- $endpoint := default (printf "https://gitlab-%s.%s/api/v4/" .Values.components.gitlab.namespace $domain) $r.gitlab.endpoint }}
+{{- if and (not .Values.components.gitlab.enabled) (empty $r.gitlab.endpoint) }}
+{{- fail "Set components.renovate.gitlab.endpoint when using an external GitLab" }}
+{{- end }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ .Release.Name }}-renovate
+  namespace: {{ .Values.argocd.namespace }}
+  labels:
+    {{- include "root-app.labels" . | nindent 4 }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ $r.syncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: {{ .Values.argocd.project }}
+  source:
+    repoURL: {{ .Values.gitops.repoUrl }}
+    targetRevision: {{ .Values.gitops.revision }}
+    path: {{ .Values.gitops.basePath }}/components/renovate
+    helm:
+      valuesObject:
+        namespace: {{ .Values.pipelineNamespace | quote }}
+        {{- with $r.image }}
+        image: {{ . | quote }}
+        {{- end }}
+        {{- with $r.helperImage }}
+        helperImage: {{ . | quote }}
+        {{- end }}
+        gitlab:
+          endpoint: {{ $endpoint | quote }}
+          existingSecret: {{ $r.gitlab.existingSecret | quote }}
+          tokenKey: {{ $r.gitlab.tokenKey | quote }}
+          usernameKey: {{ $r.gitlab.usernameKey | quote }}
+        repositories:
+          {{- toYaml $r.repositories | nindent 10 }}
+        artifactory:
+          {{- toYaml $r.artifactory | nindent 10 }}
+        trustedCA:
+          {{- toYaml $r.trustedCA | nindent 10 }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.pipelineNamespace | quote }}
+  {{- include "root-app.syncPolicy" . | nindent 2 }}
+{{- end }}

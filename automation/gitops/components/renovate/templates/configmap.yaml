@@ -1,0 +1,37 @@
+{{- if empty .Values.repositories }}
+{{- fail "renovate.repositories must contain at least one allowed GitLab project" }}
+{{- end }}
+{{- if and .Values.trustedCA.bundle .Values.trustedCA.existingConfigMap }}
+{{- fail "Set either renovate.trustedCA.bundle or existingConfigMap, not both" }}
+{{- end }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: renovate-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "renovate.labels" . | nindent 4 }}
+data:
+  settings.json: |
+    {{- dict "gitlabEndpoint" (required "Set renovate.gitlab.endpoint" .Values.gitlab.endpoint) "repositories" .Values.repositories "registryUrl" .Values.artifactory.registryUrl "mirrorId" .Values.artifactory.mirrorId | toPrettyJson | nindent 4 }}
+  base-config.cjs: |
+{{ .Files.Get "files/base-config.cjs" | indent 4 }}
+  validate-config.cjs: |
+{{ .Files.Get "files/validate-config.cjs" | indent 4 }}
+  prepare.py: |
+{{ .Files.Get "files/prepare.py" | indent 4 }}
+  validate.cjs: |
+{{ .Files.Get "files/validate.cjs" | indent 4 }}
+{{- if .Values.trustedCA.bundle }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: renovate-ca
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "renovate.labels" . | nindent 4 }}
+data:
+  {{ .Values.trustedCA.key }}: |
+{{ .Values.trustedCA.bundle | indent 4 }}
+{{- end }}

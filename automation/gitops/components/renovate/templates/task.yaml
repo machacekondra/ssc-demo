@@ -1,0 +1,137 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: {{ .Values.validation.taskName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "renovate.labels" . | nindent 4 }}
+spec:
+  description: >-
+    Read-only verification of the on-demand Renovate runtime: checks Lightwell
+    Maven metadata through Artifactory and runs Renovate in GitLab lookup mode.
+    Creates no branches, issues or merge requests. The remediation action will
+    reuse renovate-config and the same credential/CA wiring.
+  params:
+    - name: REPOSITORY
+      type: string
+      default: {{ index .Values.repositories 0 | quote }}
+    - name: PACKAGE
+      type: string
+      default: {{ .Values.validation.package | quote }}
+    - name: FIXED_VERSION
+      type: string
+      default: ""
+      description: Optional exact version that must exist in Artifactory metadata.
+  workspaces:
+    - name: maven-settings
+      readOnly: true
+      description: Bind the existing Maven settings Secret, including settings.xml.
+  results:
+    - name: STATUS
+      description: validated after Artifactory and Renovate lookup complete.
+  volumes:
+    - name: config
+      configMap:
+        name: renovate-config
+    - name: runtime
+      emptyDir:
+        sizeLimit: 2Gi
+    - name: tmp
+      emptyDir:
+        sizeLimit: 256Mi
+    {{- if include "renovate.caConfigMap" . }}
+    - name: ca
+      configMap:
+        name: {{ include "renovate.caConfigMap" . }}
+        items:
+          - key: {{ .Values.trustedCA.key }}
+            path: ca-bundle.crt
+    {{- end }}
+  stepTemplate:
+    securityContext:
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: [ALL]
+      seccompProfile:
+        type: RuntimeDefault
+    env:
+      - name: TARGET_REPOSITORY
+        value: $(params.REPOSITORY)
+      - name: TARGET_PACKAGE
+        value: $(params.PACKAGE)
+      - name: TARGET_VERSION
+        value: $(params.FIXED_VERSION)
+      - name: MAVEN_SETTINGS_FILE
+        value: $(workspaces.maven-settings.path)/settings.xml
+      - name: HOME
+        value: /work/home
+      - name: TMPDIR
+        value: /tmp
+      - name: RENOVATE_RUNTIME_DIR
+        value: /work/runtime
+      - name: PYTHONDONTWRITEBYTECODE
+        value: "1"
+      {{- if include "renovate.caConfigMap" . }}
+      - name: NODE_EXTRA_CA_CERTS
+        value: /etc/renovate-ca/ca-bundle.crt
+      - name: GIT_SSL_CAINFO
+        value: /etc/renovate-ca/ca-bundle.crt
+      - name: RENOVATE_CA_BUNDLE
+        value: /etc/renovate-ca/ca-bundle.crt
+      {{- end }}
+    volumeMounts:
+      - name: config
+        mountPath: /etc/renovate
+        readOnly: true
+      - name: runtime
+        mountPath: /work
+      - name: tmp
+        mountPath: /tmp
+      {{- if include "renovate.caConfigMap" . }}
+      - name: ca
+        mountPath: /etc/renovate-ca
+        readOnly: true
+      {{- end }}
+  steps:
+    - name: prepare-artifactory
+      image: {{ .Values.helperImage }}
+      command: [python3, /etc/renovate/prepare.py]
+      computeResources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          memory: 256Mi
+    - name: renovate-lookup
+      image: {{ .Values.image }}
+      command: [node, /etc/renovate/validate.cjs]
+      env:
+        - name: RENOVATE_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.gitlab.existingSecret }}
+              key: {{ .Values.gitlab.tokenKey }}
+        - name: RENOVATE_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.gitlab.existingSecret }}
+              key: {{ .Values.gitlab.usernameKey }}
+              optional: true
+        - name: RENOVATE_BASE_DIR
+          value: /work/renovate
+        - name: RENOVATE_CONFIG_FILE
+          value: /etc/renovate/validate-config.cjs
+        - name: RENOVATE_DRY_RUN
+          value: lookup
+        - name: RENOVATE_TELEMETRY_OPTOUT
+          value: "true"
+        - name: GIT_TERMINAL_PROMPT
+          value: "0"
+        - name: VALIDATION_RESULT_PATH
+          value: $(results.STATUS.path)
+        - name: LOG_LEVEL
+          value: info
+      computeResources:
+        {{- toYaml .Values.resources | nindent 8 }}

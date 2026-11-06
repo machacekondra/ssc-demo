@@ -244,6 +244,32 @@ components:
     namespace: gitlab
     syncWave: "8"
 
+  # On-demand Renovate foundation for /remediate-renovate. Installs shared
+  # configuration and a read-only validation Task, not a scheduled scanner.
+  renovate:
+    enabled: true
+    syncWave: "9"
+    # Empty uses the immutable image pins in components/renovate/values.yaml.
+    image: ""
+    helperImage: ""
+    gitlab:
+      # Empty derives https://gitlab-<gitlab namespace>.<domain>/api/v4/.
+      endpoint: ""
+      existingSecret: scm-auth-secret
+      tokenKey: token
+      usernameKey: username
+    repositories:
+      - development/spring-boot-example-application
+    artifactory:
+      registryUrl: http://artifactory.artifactory.svc.cluster.local:8082/artifactory/maven
+      mirrorId: artifactory
+      mavenSettingsSecret: maven-settings
+    trustedCA:
+      # Public CA PEM in the private override, OR a ConfigMap in pipelineNamespace.
+      bundle: ""
+      existingConfigMap: ""
+      key: ca-bundle.crt
+
   # Optional in-cluster registry for application images. CI currently publishes
   # to quay.io/machacekondra; if this registry is enabled as the destination,
   # update the TriggerTemplate and seed its `quay-push` credentials accordingly.

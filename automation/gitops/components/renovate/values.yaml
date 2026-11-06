@@ -1,0 +1,38 @@
+namespace: tssc-app-ci
+
+# These images were resolved from the registries, including both amd64 and arm64.
+image: ghcr.io/renovatebot/renovate:44.221.4@sha256:daf2956fdac111ff6bb36e093f42b0b28ce4d3503fa0cb267661216782b47859
+helperImage: registry.access.redhat.com/ubi9/python-311@sha256:a0bdb55576fc5b8d6704279307817828ef027e1065533ceba133fe9516003a6c
+
+gitlab:
+  endpoint: ""
+  existingSecret: scm-auth-secret
+  tokenKey: token
+  usernameKey: username
+
+# An explicit allowlist. A task parameter cannot expand the bot's repository scope.
+repositories:
+  - development/spring-boot-example-application
+
+artifactory:
+  registryUrl: http://artifactory.artifactory.svc.cluster.local:8082/artifactory/maven
+  mirrorId: artifactory
+  mavenSettingsSecret: maven-settings
+
+trustedCA:
+  # Set the public ingress CA PEM in the private bootstrap override, or reuse
+  # a ConfigMap in this namespace. Do not provide a private key.
+  bundle: ""
+  existingConfigMap: ""
+  key: ca-bundle.crt
+
+validation:
+  taskName: renovate-validate
+  package: org.apache.commons:commons-lang3
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 2Gi
