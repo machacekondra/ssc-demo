@@ -1,0 +1,54 @@
+{{- if .Values.remediation.enabled }}
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: {{ .Values.remediation.pipelineName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "renovate.labels" . | nindent 4 }}
+spec:
+  description: On-demand, exact-version Renovate remediation with a verified GitLab MR.
+  params:
+    {{- range $name := list "REPOSITORY" "PACKAGE" "CURRENT_VERSION" "FIXED_VERSION" "CVE_ID" }}
+    - name: {{ $name }}
+      type: string
+    {{- end }}
+    - name: BASE_BRANCH
+      type: string
+      default: main
+    - name: SUBDIRECTORY
+      type: string
+      default: .
+    {{- range $name := list "JUSTIFICATION" "ISSUE_IID" "REQUESTER_ID" "NOTE_ID" }}
+    - name: {{ $name }}
+      type: string
+      default: ""
+    {{- end }}
+    - name: SELECTED
+      type: string
+      default: "1"
+    - name: DRY_RUN
+      type: string
+      default: "false"
+  workspaces:
+    - name: maven-settings
+  results:
+    {{- range $name := list "STATUS" "MR_URL" "MR_IID" "BRANCH" "COMMIT_SHA" }}
+    - name: {{ $name }}
+      value: $(tasks.remediate.results.{{ $name }})
+    {{- end }}
+  tasks:
+    - name: remediate
+      taskRef:
+        name: {{ .Values.remediation.taskName }}
+      params:
+        {{- range $name := list "REPOSITORY" "PACKAGE" "CURRENT_VERSION" "FIXED_VERSION" "CVE_ID" "BASE_BRANCH" "SUBDIRECTORY" "JUSTIFICATION" "ISSUE_IID" "REQUESTER_ID" "NOTE_ID" "SELECTED" "DRY_RUN" }}
+        - name: {{ $name }}
+          value: $(params.{{ $name }})
+        {{- end }}
+        - name: PIPELINE_RUN_NAME
+          value: $(context.pipelineRun.name)
+      workspaces:
+        - name: maven-settings
+          workspace: maven-settings
+{{- end }}

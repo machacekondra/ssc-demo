@@ -1,10 +1,12 @@
 # Renovate on-demand component
 
-This component prepares Renovate for the planned `/remediate-renovate` action.
+This component implements on-demand `/remediate-renovate` remediation.
 It installs `renovate-config`, the `renovate` ServiceAccount, an optional
-`renovate-ca` ConfigMap, and the `renovate-validate` Tekton Task in the pipeline
-namespace. There is no CronJob, Deployment, webhook, or automatic MR creation.
-Renovate is a CLI run inside a TaskRun, not a resident API service.
+`renovate-ca` ConfigMap, the `renovate-validate` and
+`renovate-remediate-dependency` Tasks, and the `cve-remediation-renovate` Pipeline.
+Renovate runs inside a TaskRun; there is no CronJob or resident API service.
+The existing issue EventListener and the binding/template in
+`pipelines/triggers/renovate-remediation-trigger.yaml` provide the slash command.
 
 The bootstrap chart enables the `ssc-renovate` Application at wave 9, after
 GitLab has seeded the application and SCM Secret. As with the other components,
@@ -77,14 +79,57 @@ using a version from the metadata summary. The task requires both that metadata
 entry and the version's POM to be available. Do not assume an old demo fixture's
 version exists in the current Lightwell catalog.
 
-## Reuse for the remediation action
+## Run the remediation action
 
-The future action can mount `renovate-config`, run `prepare.py`, and load
-`base-config.cjs` with `{repository, packageName, fixedVersion}`. The base module
-uses GitLab mode, the native Maven manager, Artifactory-only registry URLs,
-draft MRs, no automerge, and an exact escaped version constraint when supplied.
-It ignores application-provided Renovate configuration to keep the request
-scope under the pipeline's control.
+On an open generated CVE issue, comment `/remediate-renovate`. The existing
+six-field `cve-decision` issue marker supplies the requested coordinate and
+versions. As with `/remediate`, YAML or JSON immediately after the command can
+override the decision fields:
+
+```text
+/remediate-renovate
+FIXED_VERSION: "2.2"
+JUSTIFICATION: Use the selected available fix.
+```
+
+The commands match exactly: `/remediate` remains the AI path, while
+`/remediate-renovate` starts only `cve-remediation-renovate`. The bot checks the
+actual GitLab note and requires its author to have Developer access or higher.
+Each note has a deterministic PipelineRun name; duplicate webhook deliveries
+cannot start another run. Post a new comment to intentionally retry.
+
+The task checks the current POM, verifies the exact target exists in Artifactory,
+and runs Renovate in **GitLab** mode with the native Maven manager. It creates or
+reuses a deterministic draft MR. Only the selected POM may change, and only the
+requested version edit is accepted. Maven then runs `verify` and produces a JSON
+dependency tree to confirm that the requested coordinate resolves to the fixed
+version. The bot marks the MR ready only if that exact MR commit and its target
+branch have not moved during verification. Failures leave the MR draft.
+
+Maven gets the candidate source and Maven settings, but does not mount Renovate's
+runtime/cache or receive the GitLab token. Settings are not dumped to logs.
+No AI credential is needed. Merge remains a human action; a successful build does
+not itself prove that an advisory considers the CVE fixed. Use the normal
+SBOM/RHTPA flow to check the security result.
+
+The first version supports a dependency declared in the selected project's POM,
+with a literal version or a property defined and used solely there. It rejects
+stale issue versions, shared/inherited properties, implicit BOM versions,
+transitive-only dependencies, and unrelated POM changes with an actionable error.
+`SUBDIRECTORY` defaults to `.` because it is a path within the Git repository,
+not the `source` workspace prefix used by the older clone pipeline.
+
+Results are `STATUS` (`ready`, `already-fixed`, `skipped`, or `dry-run`), `MR_URL`,
+`MR_IID`, `BRANCH`, and `COMMIT_SHA`. An already-fixed base needs no new MR.
+Generated runtime configuration ignores application-provided Renovate config,
+restricts the repository and coordinate, and uses an exact escaped version rule.
+
+For a read-only full simulation, start `cve-remediation-renovate` manually with
+`DRY_RUN=true`, the same coordinate/version decision, and the `maven-settings`
+workspace bound to its Secret. It clones and checks the real POM and metadata,
+then runs Renovate with `dryRun=full`; it creates no branch or MR and skips
+candidate compilation. Leave `REQUESTER_ID` and `NOTE_ID` empty only for manual
+Kubernetes-authorized runs. Webhook runs always supply and verify those fields.
 
 The Lightwell connection here is the existing Artifactory virtual repository,
 which aggregates Lightwell remediated/validated packages and Maven Central.
@@ -92,9 +137,8 @@ The Lightwell `java-remediated` discovery preset is not loaded: it disables the
 native Maven manager, whereas the planned action applies a fixed version already
 selected in the issue. Periodic discovery remains a separate future feature.
 
-The `/remediate-renovate` webhook, draft-MR execution, verification, and marking
-the MR ready are subsequent work. Deploying this foundation does not activate
-those actions.
+`SELECTED=0` is an explicit no-op and returns `STATUS=skipped` without GitLab or
+Artifactory requests. There are no periodic scans.
 
 ## Local checks
 

@@ -4,6 +4,7 @@
 # trigger's cel `filter` picks the command it handles, so a comment only starts the
 # matching pipeline:
 #
+#   /remediate-renovate -> cve-remediation-renovate (Renovate + Maven verification)
 #   /remediate       ->  agentic-cve-remediation   (reads a decision from the issue)
 #   /generate-tests  ->  agentic-test-generation   (unit tests; no decision needed)
 #   /generate-tests-functional   ->  agentic-test-generation-functional
@@ -557,7 +558,7 @@ spec:
               value: >-
                 body.object_attributes.noteable_type == 'Issue' &&
                 body.object_attributes.system == false &&
-                body.object_attributes.note.startsWith('/remediate')
+                body.object_attributes.note.matches('^/remediate(\\s|$)')
             - name: overlays
               value:
                 # Raw decision text from the issue body's <!-- cve-decision ... --> marker.
@@ -623,6 +624,114 @@ spec:
         - ref: cve-remediation-issue-binding
       template:
         ref: cve-remediation-issue-template
+    - name: gitlab-issue-remediate-renovate
+      interceptors:
+        # 1) Validate the shared secret token and that this is a comment event.
+        - ref:
+            name: gitlab
+          params:
+            - name: secretRef
+              value:
+                secretName: gitlab-webhook-secret
+                secretKey: secretToken
+            - name: eventTypes
+              value:
+                - "Note Hook"
+        # 2) Only act on issue comments beginning with /remediate-renovate.
+        #
+        # Two cel-interceptor gotchas shape the structure below:
+        #
+        #  (1) Overlays within a SINGLE cel interceptor do NOT chain -- they are all
+        #      evaluated against the same starting extensions (empty), so an overlay
+        #      cannot read an extension set by a sibling ("no such key"). Extensions
+        #      only become visible to the NEXT interceptor. So the decision merge is
+        #      split into three sequential cel interceptors by dependency:
+        #        (a) raw text  ->  (b) parsed maps  ->  (c) merged fields.
+        #
+        #  (2) The overlay `key` is relative to the extensions root already, so it
+        #      must be BARE (key: issueRaw), NOT prefixed (key: extensions.issueRaw).
+        #      A prefixed key double-nests to extensions.extensions.issueRaw, which
+        #      the next stage's `extensions.issueRaw` then can't find. Expressions
+        #      and TriggerBinding refs, by contrast, DO use the extensions. prefix.
+        - ref:
+            name: cel
+          params:
+            - name: filter
+              value: >-
+                body.object_attributes.noteable_type == 'Issue' &&
+                body.object_attributes.system == false &&
+                body.object_attributes.note.matches('^/remediate-renovate(\\s|$)')
+            - name: overlays
+              value:
+                # Raw decision text from the issue body's <!-- cve-decision ... --> marker.
+                - key: issueRaw
+                  expression: >-
+                    (has(body.issue) && has(body.issue.description) && body.issue.description != null && size(body.issue.description.split("<!-- cve-decision")) > 1) ? body.issue.description.split("<!-- cve-decision")[1].split("-->")[0] : ""
+                # Raw override text from the comment (everything after /remediate-renovate).
+                - key: commentRaw
+                  expression: >-
+                    size(body.object_attributes.note.split("/remediate-renovate")) > 1 ? body.object_attributes.note.split("/remediate-renovate")[1] : ""
+        # (b) Parse both raw blocks into maps (parseYAML also accepts JSON). Skip
+        #     parsing when there's no "key: value" content, to avoid errors on empty
+        #     text. Reads extensions.issueRaw / commentRaw from the previous stage.
+        - ref:
+            name: cel
+          params:
+            - name: overlays
+              value:
+                - key: issueMap
+                  expression: >-
+                    extensions.issueRaw.contains(":") ? extensions.issueRaw.parseYAML() : {}
+                - key: commentMap
+                  expression: >-
+                    extensions.commentRaw.contains(":") ? extensions.commentRaw.parseYAML() : {}
+        # (c) Merge each field (comment > issue > default) and derive SCM coordinates.
+        #     Reads extensions.issueMap / commentMap from the previous stage.
+        - ref:
+            name: cel
+          params:
+            - name: overlays
+              value:
+                - key: SELECTED
+                  expression: >-
+                    ("SELECTED" in extensions.commentMap) ? string(extensions.commentMap["SELECTED"]) : (("SELECTED" in extensions.issueMap) ? string(extensions.issueMap["SELECTED"]) : "1")
+                - key: CVE_ID
+                  expression: >-
+                    ("CVE_ID" in extensions.commentMap) ? string(extensions.commentMap["CVE_ID"]) : (("CVE_ID" in extensions.issueMap) ? string(extensions.issueMap["CVE_ID"]) : "")
+                - key: PACKAGE
+                  expression: >-
+                    ("PACKAGE" in extensions.commentMap) ? string(extensions.commentMap["PACKAGE"]) : (("PACKAGE" in extensions.issueMap) ? string(extensions.issueMap["PACKAGE"]) : "")
+                - key: CURRENT_VERSION
+                  expression: >-
+                    ("CURRENT_VERSION" in extensions.commentMap) ? string(extensions.commentMap["CURRENT_VERSION"]) : (("CURRENT_VERSION" in extensions.issueMap) ? string(extensions.issueMap["CURRENT_VERSION"]) : "")
+                - key: FIXED_VERSION
+                  expression: >-
+                    ("FIXED_VERSION" in extensions.commentMap) ? string(extensions.commentMap["FIXED_VERSION"]) : (("FIXED_VERSION" in extensions.issueMap) ? string(extensions.issueMap["FIXED_VERSION"]) : "")
+                - key: JUSTIFICATION
+                  expression: >-
+                    ("JUSTIFICATION" in extensions.commentMap) ? string(extensions.commentMap["JUSTIFICATION"]) : (("JUSTIFICATION" in extensions.issueMap) ? string(extensions.issueMap["JUSTIFICATION"]) : "")
+                # SCM coordinates derived from the payload.
+                - key: git_host
+                  expression: >-
+                    body.project.git_http_url.parseURL().host
+                - key: base_branch
+                  expression: >-
+                    (has(body.project.default_branch) && body.project.default_branch != null) ? body.project.default_branch : "main"
+                # The commented-on issue's project-scoped number (iid), as a string,
+                # so the opened MR can link back to it. Falls back to "" if absent.
+                - key: issue_iid
+                  expression: >-
+                    (has(body.issue) && has(body.issue.iid) && body.issue.iid != null) ? string(body.issue.iid) : ""
+                - key: note_id
+                  expression: string(body.object_attributes.id)
+                - key: requester_id
+                  expression: string(body.user.id)
+                - key: project_id
+                  expression: string(body.project.id)
+      bindings:
+        - ref: renovate-remediation-issue-binding
+      template:
+        ref: renovate-remediation-issue-template
     - name: gitlab-issue-generate-tests
       interceptors:
         # 1) Validate the shared secret token and that this is a comment event.

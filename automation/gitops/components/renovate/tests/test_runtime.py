@@ -132,6 +132,38 @@ class RuntimeTests(unittest.TestCase):
         self.assertFalse(config["autodiscover"])
         self.assertFalse(config["automerge"])
 
+    @unittest.skipUnless(shutil.which("node"), "Node.js is needed to check the Renovate config")
+    def test_remediation_config_scopes_branch_pom_and_dry_run(self):
+        self.runtime.mkdir()
+        (self.runtime / "artifactory.json").write_text(json.dumps({"username": "reader", "password": "fixture"}))
+        script = r'''
+          const build = require(process.argv[1]);
+          const request = {repository: process.env.TARGET_REPOSITORY,
+            package: process.env.TARGET_PACKAGE, fixedVersion: process.env.TARGET_VERSION,
+            baseBranch: 'main', branch: 'renovate-remediate/request/fix', pomPath: 'pom.xml',
+            cveId: 'CVE-2025-12345', runName: 'run-1', issueIid: '7'};
+          const real = build(request);
+          const dry = build({...request, dryRun: true});
+          console.log(JSON.stringify({branch: real.branchName, prefix: real.branchPrefix,
+            paths: real.includePaths, base: real.baseBranchPatterns,
+            dry: dry.dryRun, realDry: real.dryRun || null,
+            draft: real.draftPR, automerge: real.automerge,
+            version: real.packageRules[1].allowedVersions}));
+        '''
+        config = json.loads(subprocess.check_output(
+            ["node", "-e", script, str(FILES / "remediate-config.cjs")],
+            env={**os.environ, **self.env}, text=True,
+        ))
+        self.assertEqual(config["branch"], "renovate-remediate/request/fix")
+        self.assertEqual(config["prefix"], "renovate-remediate/request/")
+        self.assertEqual(config["paths"], ["pom.xml"])
+        self.assertEqual(config["base"], ["main"])
+        self.assertEqual(config["dry"], "full")
+        self.assertIsNone(config["realDry"])
+        self.assertTrue(config["draft"])
+        self.assertFalse(config["automerge"])
+        self.assertEqual(config["version"], r"/^3\.14\.0\.rhlw-00001$/")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -246,8 +246,8 @@ components:
     namespace: gitlab
     syncWave: "8"
 
-  # On-demand Renovate foundation for /remediate-renovate. Installs shared
-  # configuration and a read-only validation Task, not a scheduled scanner.
+  # On-demand /remediate-renovate execution and read-only validation.
+  # Shared configuration, draft MRs and Maven verification; no scheduled scans.
   renovate:
     enabled: true
     syncWave: "9"

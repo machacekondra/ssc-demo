@@ -30,6 +30,13 @@ validation:
   taskName: renovate-validate
   package: org.apache.commons:commons-lang3
 
+remediation:
+  enabled: true
+  taskName: renovate-remediate-dependency
+  pipelineName: cve-remediation-renovate
+  # Existing Maven/JDK 17 runtime used by the demo, pinned by digest.
+  mavenImage: registry.redhat.io/ubi9/openjdk-17@sha256:5d619e202695acf76a5f32c07ace6709f5ee5d3999bf977e1bf95ad34197f44a
+
 resources:
   requests:
     cpu: 250m

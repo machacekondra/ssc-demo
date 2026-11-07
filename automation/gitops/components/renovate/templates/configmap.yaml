@@ -22,6 +22,14 @@ data:
 {{ .Files.Get "files/prepare.py" | indent 4 }}
   validate.cjs: |
 {{ .Files.Get "files/validate.cjs" | indent 4 }}
+  remediation.py: |
+{{ .Files.Get "files/remediation.py" | indent 4 }}
+  remediate-config.cjs: |
+{{ .Files.Get "files/remediate-config.cjs" | indent 4 }}
+  candidate.cjs: |
+{{ .Files.Get "files/candidate.cjs" | indent 4 }}
+  git-askpass.sh: |
+{{ .Files.Get "files/git-askpass.sh" | indent 4 }}
 {{- if .Values.trustedCA.bundle }}
 ---
 apiVersion: v1

@@ -1,0 +1,105 @@
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerBinding
+metadata:
+  name: renovate-remediation-issue-binding
+  labels:
+    app.kubernetes.io/part-of: maven-build-ci
+spec:
+  params:
+    - name: REPOSITORY
+      value: $(body.project.path_with_namespace)
+    - name: BASE_BRANCH
+      value: $(extensions.base_branch)
+    - name: SELECTED
+      value: $(extensions.SELECTED)
+    - name: CVE_ID
+      value: $(extensions.CVE_ID)
+    - name: PACKAGE
+      value: $(extensions.PACKAGE)
+    - name: CURRENT_VERSION
+      value: $(extensions.CURRENT_VERSION)
+    - name: FIXED_VERSION
+      value: $(extensions.FIXED_VERSION)
+    - name: JUSTIFICATION
+      value: $(extensions.JUSTIFICATION)
+    - name: ISSUE_IID
+      value: $(extensions.issue_iid)
+    - name: REQUESTER_ID
+      value: $(extensions.requester_id)
+    - name: NOTE_ID
+      value: $(extensions.note_id)
+    - name: PROJECT_ID
+      value: $(extensions.project_id)
+---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: renovate-remediation-issue-template
+  labels:
+    app.kubernetes.io/part-of: maven-build-ci
+spec:
+  params:
+    - name: REPOSITORY
+    - name: BASE_BRANCH
+      default: main
+    - name: SELECTED
+      default: "1"
+    - name: CVE_ID
+      default: ""
+    - name: PACKAGE
+      default: ""
+    - name: CURRENT_VERSION
+      default: ""
+    - name: FIXED_VERSION
+      default: ""
+    - name: JUSTIFICATION
+      default: ""
+    - name: ISSUE_IID
+    - name: REQUESTER_ID
+    - name: NOTE_ID
+    - name: PROJECT_ID
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1
+      kind: PipelineRun
+      metadata:
+        # One GitLab comment has one immutable execution identity. Retrying the
+        # same webhook cannot start a second remediation run.
+        name: renovate-issue-$(tt.params.PROJECT_ID)-$(tt.params.NOTE_ID)
+        labels:
+          app.kubernetes.io/part-of: ssc-demo
+          tekton.dev/pipeline: cve-remediation-renovate
+          trigger: gitlab-issue-renovate
+      spec:
+        pipelineRef:
+          name: cve-remediation-renovate
+        taskRunTemplate:
+          serviceAccountName: renovate
+        timeouts:
+          pipeline: 45m
+        params:
+          - name: REPOSITORY
+            value: $(tt.params.REPOSITORY)
+          - name: BASE_BRANCH
+            value: $(tt.params.BASE_BRANCH)
+          - name: SELECTED
+            value: $(tt.params.SELECTED)
+          - name: CVE_ID
+            value: $(tt.params.CVE_ID)
+          - name: PACKAGE
+            value: $(tt.params.PACKAGE)
+          - name: CURRENT_VERSION
+            value: $(tt.params.CURRENT_VERSION)
+          - name: FIXED_VERSION
+            value: $(tt.params.FIXED_VERSION)
+          - name: JUSTIFICATION
+            value: $(tt.params.JUSTIFICATION)
+          - name: ISSUE_IID
+            value: $(tt.params.ISSUE_IID)
+          - name: REQUESTER_ID
+            value: $(tt.params.REQUESTER_ID)
+          - name: NOTE_ID
+            value: $(tt.params.NOTE_ID)
+        workspaces:
+          - name: maven-settings
+            secret:
+              secretName: maven-settings

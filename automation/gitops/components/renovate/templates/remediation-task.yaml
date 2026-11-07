@@ -1,0 +1,264 @@
+{{- if .Values.remediation.enabled }}
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: {{ .Values.remediation.taskName }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "renovate.labels" . | nindent 4 }}
+spec:
+  description: >-
+    Apply one issue-selected Maven fix with Renovate in GitLab mode. Check the
+    current POM and Artifactory target, create/reuse a draft MR, verify its exact
+    diff, run Maven tests, confirm the resolved version, then mark that MR ready.
+    Failures leave the MR draft. DRY_RUN=true performs a full Renovate simulation.
+  params:
+    - name: REPOSITORY
+      type: string
+    - name: PACKAGE
+      type: string
+    - name: CURRENT_VERSION
+      type: string
+    - name: FIXED_VERSION
+      type: string
+    - name: CVE_ID
+      type: string
+    - name: BASE_BRANCH
+      type: string
+      default: main
+    - name: SUBDIRECTORY
+      type: string
+      default: .
+    - name: JUSTIFICATION
+      type: string
+      default: ""
+    - name: ISSUE_IID
+      type: string
+      default: ""
+    - name: REQUESTER_ID
+      type: string
+      default: ""
+    - name: NOTE_ID
+      type: string
+      default: ""
+    - name: SELECTED
+      type: string
+      default: "1"
+    - name: DRY_RUN
+      type: string
+      default: "false"
+    - name: PIPELINE_RUN_NAME
+      type: string
+      default: manual
+  workspaces:
+    - name: maven-settings
+      readOnly: true
+  results:
+    - name: STATUS
+      description: ready, already-fixed, skipped, or dry-run; failures keep any MR draft.
+    - name: MR_URL
+    - name: MR_IID
+    - name: BRANCH
+    - name: COMMIT_SHA
+  volumes:
+    - name: config
+      configMap:
+        name: renovate-config
+        defaultMode: 0555
+    - name: runtime
+      emptyDir:
+        sizeLimit: 2Gi
+    - name: runtime-tmp
+      emptyDir:
+        sizeLimit: 256Mi
+    - name: candidate
+      emptyDir:
+        sizeLimit: 1Gi
+    - name: evidence
+      emptyDir:
+        sizeLimit: 64Mi
+    - name: maven-home
+      emptyDir:
+        sizeLimit: 2Gi
+    - name: maven-tmp
+      emptyDir:
+        sizeLimit: 256Mi
+    {{- if include "renovate.caConfigMap" . }}
+    - name: ca
+      configMap:
+        name: {{ include "renovate.caConfigMap" . }}
+        items:
+          - key: {{ .Values.trustedCA.key }}
+            path: ca-bundle.crt
+    {{- end }}
+  stepTemplate:
+    securityContext:
+      runAsNonRoot: true
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: [ALL]
+      seccompProfile:
+        type: RuntimeDefault
+    env:
+      - name: TARGET_REPOSITORY
+        value: $(params.REPOSITORY)
+      - name: TARGET_PACKAGE
+        value: $(params.PACKAGE)
+      - name: TARGET_VERSION
+        value: $(params.FIXED_VERSION)
+      {{- range $name := list "CURRENT_VERSION" "CVE_ID" "BASE_BRANCH" "SUBDIRECTORY" "JUSTIFICATION" "ISSUE_IID" "REQUESTER_ID" "NOTE_ID" "SELECTED" "DRY_RUN" "PIPELINE_RUN_NAME" }}
+      - name: {{ $name }}
+        value: $(params.{{ $name }})
+      {{- end }}
+      - name: MAVEN_SETTINGS_FILE
+        value: $(workspaces.maven-settings.path)/settings.xml
+      - name: HOME
+        value: /work/home
+      - name: RENOVATE_RUNTIME_DIR
+        value: /work/runtime
+      - name: RENOVATE_BASE_DIR
+        value: /work/renovate
+      - name: PYTHONDONTWRITEBYTECODE
+        value: "1"
+      - name: RENOVATE_TELEMETRY_OPTOUT
+        value: "true"
+      - name: LOG_LEVEL
+        value: info
+      {{- range $name := list "STATUS" "MR_URL" "MR_IID" "BRANCH" "COMMIT_SHA" }}
+      - name: RESULT_{{ $name }}
+        value: $(results.{{ $name }}.path)
+      {{- end }}
+      {{- if include "renovate.caConfigMap" . }}
+      - name: NODE_EXTRA_CA_CERTS
+        value: /etc/renovate-ca/ca-bundle.crt
+      - name: GIT_SSL_CAINFO
+        value: /etc/renovate-ca/ca-bundle.crt
+      - name: RENOVATE_CA_BUNDLE
+        value: /etc/renovate-ca/ca-bundle.crt
+      {{- end }}
+    volumeMounts:
+      - name: config
+        mountPath: /etc/renovate
+        readOnly: true
+      {{- if include "renovate.caConfigMap" . }}
+      - name: ca
+        mountPath: /etc/renovate-ca
+        readOnly: true
+      {{- end }}
+  steps:
+    - name: check-request
+      image: {{ .Values.helperImage }}
+      command: [python3, /etc/renovate/remediation.py, preflight]
+      env:
+        {{- include "renovate.scmEnv" . | nindent 8 }}
+      volumeMounts:
+        {{- include "renovate.runtimeMounts" . | nindent 8 }}
+    - name: checkout-base
+      image: {{ .Values.image }}
+      command: [node, /etc/renovate/candidate.cjs, base]
+      env:
+        {{- include "renovate.scmEnv" . | nindent 8 }}
+      volumeMounts:
+        {{- include "renovate.runtimeMounts" . | nindent 8 }}
+    - name: inspect-pom
+      image: {{ .Values.helperImage }}
+      command: [python3, /etc/renovate/remediation.py, inspect]
+      volumeMounts:
+        {{- include "renovate.runtimeMounts" . | nindent 8 }}
+    - name: check-artifactory
+      image: {{ .Values.helperImage }}
+      command: [python3, /etc/renovate/remediation.py, prepare]
+      volumeMounts:
+        {{- include "renovate.runtimeMounts" . | nindent 8 }}
+    - name: ensure-draft
+      image: {{ .Values.helperImage }}
+      command: [python3, /etc/renovate/remediation.py, redraft]
+      env:
+        {{- include "renovate.scmEnv" . | nindent 8 }}
+      volumeMounts:
+        {{- include "renovate.runtimeMounts" . | nindent 8 }}
+    - name: renovate-update
+      image: {{ .Values.image }}
+      command: [node, /etc/renovate/candidate.cjs, run]
+      env:
+        {{- include "renovate.scmEnv" . | nindent 8 }}
+      computeResources:
+        {{- toYaml .Values.resources | nindent 8 }}
+      volumeMounts:
+        {{- include "renovate.runtimeMounts" . | nindent 8 }}
+    - name: collect-mr
+      image: {{ .Values.helperImage }}
+      command: [python3, /etc/renovate/remediation.py, collect]
+      env:
+        {{- include "renovate.scmEnv" . | nindent 8 }}
+      volumeMounts:
+        {{- include "renovate.runtimeMounts" . | nindent 8 }}
+    - name: export-candidate
+      image: {{ .Values.image }}
+      command: [node, /etc/renovate/candidate.cjs, export]
+      env:
+        {{- include "renovate.scmEnv" . | nindent 8 }}
+      volumeMounts:
+        {{- include "renovate.runtimeMounts" . | nindent 8 }}
+        - name: candidate
+          mountPath: /candidate
+    - name: check-change-scope
+      image: {{ .Values.helperImage }}
+      command: [python3, /etc/renovate/remediation.py, check-change]
+      volumeMounts:
+        {{- include "renovate.runtimeMounts" . | nindent 8 }}
+        - name: candidate
+          mountPath: /candidate
+    - name: maven-verify
+      image: {{ .Values.remediation.mavenImage }}
+      env:
+        - name: HOME
+          value: /maven-home
+        - name: JAVA_TOOL_OPTIONS
+          value: -Duser.home=/maven-home
+      command: [/bin/bash, -c]
+      args:
+        - |
+          set -euo pipefail
+          if [[ ! -f /candidate/RUN_VERIFY ]]; then
+            echo "No candidate requires verification."
+            exit 0
+          fi
+          cd "/candidate/project/$SUBDIRECTORY"
+          /usr/bin/mvn -B -ntp -s "$MAVEN_SETTINGS_FILE" -DskipTests=false -Dmaven.test.skip=false verify
+          /usr/bin/mvn -B -ntp -s "$MAVEN_SETTINGS_FILE" \
+            org.apache.maven.plugins:maven-dependency-plugin:3.8.1:tree \
+            -DoutputType=json -DoutputFile=/evidence/dependency-tree.json
+          touch /evidence/maven-verified
+      computeResources:
+        requests:
+          cpu: 500m
+          memory: 512Mi
+        limits:
+          memory: 2Gi
+      # This container cannot see Renovate's cache/runtime or the GitLab token.
+      volumeMounts:
+        - name: candidate
+          mountPath: /candidate
+        - name: evidence
+          mountPath: /evidence
+        - name: maven-home
+          mountPath: /maven-home
+        - name: maven-tmp
+          mountPath: /tmp
+    - name: check-resolved-version
+      image: {{ .Values.helperImage }}
+      command: [python3, /etc/renovate/remediation.py, check-dependency]
+      volumeMounts:
+        {{- include "renovate.runtimeMounts" . | nindent 8 }}
+        - name: evidence
+          mountPath: /evidence
+    - name: mark-mr-ready
+      image: {{ .Values.helperImage }}
+      command: [python3, /etc/renovate/remediation.py, finalize]
+      env:
+        {{- include "renovate.scmEnv" . | nindent 8 }}
+      volumeMounts:
+        {{- include "renovate.runtimeMounts" . | nindent 8 }}
+{{- end }}
