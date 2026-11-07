@@ -721,13 +721,13 @@ spec:
                 # so the opened MR can link back to it. Falls back to "" if absent.
                 - key: issue_iid
                   expression: >-
-                    (has(body.issue) && has(body.issue.iid) && body.issue.iid != null) ? string(body.issue.iid) : ""
+                    (has(body.issue) && has(body.issue.iid) && body.issue.iid != null) ? string(int(body.issue.iid)) : ""
                 - key: note_id
-                  expression: string(body.object_attributes.id)
+                  expression: string(int(body.object_attributes.id))
                 - key: requester_id
-                  expression: string(body.user.id)
+                  expression: string(int(body.user.id))
                 - key: project_id
-                  expression: string(body.project.id)
+                  expression: string(int(body.project.id))
       bindings:
         - ref: renovate-remediation-issue-binding
       template:

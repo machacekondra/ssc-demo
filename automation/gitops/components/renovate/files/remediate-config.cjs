@@ -11,8 +11,14 @@ module.exports = function remediationConfig(request) {
     baseBranchPatterns: [request.baseBranch],
     includePaths: [request.pomPath],
     branchPrefix: request.branch.slice(0, request.branch.lastIndexOf('/') + 1),
-    branchName: request.branch,
-    prTitle: `fix(${request.cveId}): update ${request.package} to ${request.fixedVersion}`,
+    additionalBranchPrefix: '',
+    branchTopic: request.branch.slice(request.branch.lastIndexOf('/') + 1),
+    commitMessagePrefix: `fix(${request.cveId}):`,
+    commitMessageAction: 'update',
+    commitMessageTopic: request.package,
+    commitMessageExtra: `to ${request.fixedVersion}`,
+    // Disabled dashboards must not target a dashboard used by another bot run.
+    dependencyDashboardTitle: `Renovate remediation ${request.branch}`,
     prBodyNotes: [
       request.justification,
       request.issueIid ? `Related to #${request.issueIid}` : '',

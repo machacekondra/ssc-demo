@@ -65,6 +65,17 @@ class ManifestTests(unittest.TestCase):
         self.assertTrue({"REQUESTER_ID", "NOTE_ID", "ISSUE_IID"}.issubset(names))
         self.assertNotIn("DRY_RUN", names)
 
+    def test_numeric_webhook_ids_are_formatted_as_integers(self):
+        listener = next(d for d in self.triggers if d["kind"] == "EventListener")
+        trigger = next(t for t in listener["spec"]["triggers"] if t["name"] == "gitlab-issue-remediate-renovate")
+        overlays = {o["key"]: o["expression"] for i in trigger["interceptors"]
+                    for p in i.get("params", []) if p["name"] == "overlays" for o in p["value"]}
+        # string(double) can produce scientific notation, invalid in run names
+        # and numeric GitLab request context. CEL must format the integer value.
+        self.assertEqual(overlays["note_id"], "string(int(body.object_attributes.id))")
+        self.assertEqual(overlays["requester_id"], "string(int(body.user.id))")
+        self.assertEqual(overlays["project_id"], "string(int(body.project.id))")
+
     def test_maven_has_no_gitlab_token_or_renovate_runtime_mount(self):
         task = next(d for d in self.resources if d["kind"] == "Task" and d["metadata"]["name"] == "renovate-remediate-dependency")
         common = task["spec"]["stepTemplate"]

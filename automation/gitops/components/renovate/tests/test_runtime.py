@@ -144,7 +144,7 @@ class RuntimeTests(unittest.TestCase):
             cveId: 'CVE-2025-12345', runName: 'run-1', issueIid: '7'};
           const real = build(request);
           const dry = build({...request, dryRun: true});
-          console.log(JSON.stringify({branch: real.branchName, prefix: real.branchPrefix,
+          console.log(JSON.stringify({branch: real.branchPrefix + real.additionalBranchPrefix + real.branchTopic, prefix: real.branchPrefix,
             paths: real.includePaths, base: real.baseBranchPatterns,
             dry: dry.dryRun, realDry: real.dryRun || null,
             draft: real.draftPR, automerge: real.automerge,
