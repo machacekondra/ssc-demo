@@ -94,15 +94,15 @@ class RemediationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "shared"):
             MODULE.inspect_pom()
 
-    def test_stale_decision_and_transitive_dependency_are_rejected(self):
+    def test_stale_decision_is_rejected_and_transitive_dependency_gets_override_mode(self):
         self.base_pom(version="1.1")
         with self.assertRaisesRegex(ValueError, "stale"):
             MODULE.inspect_pom()
         state = MODULE.load()
         state["package"] = "org.transitive:missing"
         MODULE.save(state)
-        with self.assertRaisesRegex(ValueError, "transitive"):
-            MODULE.inspect_pom()
+        MODULE.inspect_pom()
+        self.assertEqual(MODULE.load()["dependencyMode"], "managed-override")
 
     def test_already_fixed_needs_no_mr(self):
         self.base_pom(version="1.0.rhlw-00001")

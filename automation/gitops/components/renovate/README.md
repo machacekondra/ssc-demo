@@ -98,13 +98,17 @@ actual GitLab note and requires its author to have Developer access or higher.
 Each note has a deterministic PipelineRun name; duplicate webhook deliveries
 cannot start another run. Post a new comment to intentionally retry.
 
-The task checks the current POM, verifies the exact target exists in Artifactory,
-and runs Renovate in **GitLab** mode with the native Maven manager. It creates or
-reuses a deterministic draft MR. Only the selected POM may change, and only the
-requested version edit is accepted. Maven then runs `verify` and produces a JSON
-dependency tree to confirm that the requested coordinate resolves to the fixed
-version. The bot marks the MR ready only if that exact MR commit and its target
-branch have not moved during verification. Failures leave the MR draft.
+The task checks the current POM and verifies that the exact target exists in
+Artifactory. For a directly declared dependency, Renovate uses GitLab mode and
+its native Maven manager. For a transitive-only dependency, the task first
+confirms the current version in the base Maven tree, then adds an explicit
+project `dependencyManagement` override through GitLab's repository API. Both
+paths create or reuse a deterministic draft MR. Only the selected POM may
+change, and only the requested version change is accepted. Maven then runs
+`verify` and produces a JSON dependency tree to confirm that the requested
+coordinate resolves only to the fixed version. The bot marks the MR ready only
+if that exact MR commit and its target branch have not moved during verification.
+Failures leave the MR draft.
 
 Maven gets the candidate source and Maven settings, but does not mount Renovate's
 runtime/cache or receive the GitLab token. Settings are not dumped to logs.
@@ -112,12 +116,18 @@ No AI credential is needed. Merge remains a human action; a successful build doe
 not itself prove that an advisory considers the CVE fixed. Use the normal
 SBOM/RHTPA flow to check the security result.
 
-The first version supports a dependency declared in the selected project's POM,
-with a literal version or a property defined and used solely there. It rejects
-stale issue versions, shared/inherited properties, implicit BOM versions,
-transitive-only dependencies, and unrelated POM changes with an actionable error.
-`SUBDIRECTORY` defaults to `.` because it is a path within the Git repository,
-not the `source` workspace prefix used by the older clone pipeline.
+The action supports a dependency declared in the selected project's POM, with a
+literal version or a property defined and used solely there. For a transitive-only
+dependency, it first confirms the issue's current version against the base
+project's resolved Maven tree, then adds an explicit project-level
+`dependencyManagement` version override. The candidate must pass `mvn verify`,
+and the resolved dependency tree must contain only the requested fixed version.
+It rejects stale issue versions, shared/inherited properties, ambiguous
+multi-version transitive resolutions, and unrelated POM changes. Maven uses
+`dependencyManagement` to control versions of transitive dependencies; merge
+remains a human action after verification. `SUBDIRECTORY` defaults to `.` because
+it is a path within the Git repository, not the `source` workspace prefix used
+by the older clone pipeline.
 
 Results are `STATUS` (`ready`, `already-fixed`, `skipped`, or `dry-run`), `MR_URL`,
 `MR_IID`, `BRANCH`, and `COMMIT_SHA`. An already-fixed base needs no new MR.

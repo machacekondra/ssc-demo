@@ -35,6 +35,10 @@ function main() {
     console.log('Checked out the target branch at ' + request.baseSha);
   } else if (command === 'run') {
     if (request.status !== 'active') return;
+    if (request.dependencyMode === 'managed-override') {
+      console.log('Renovate update skipped; the verified transitive dependency override was committed directly.');
+      return;
+    }
     require('./remediate-config.cjs')(request);
     fs.mkdirSync(process.env.RENOVATE_BASE_DIR, { recursive: true, mode: 0o700 });
     const env = { ...process.env,

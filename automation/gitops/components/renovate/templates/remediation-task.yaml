@@ -8,10 +8,12 @@ metadata:
     {{- include "renovate.labels" . | nindent 4 }}
 spec:
   description: >-
-    Apply one issue-selected Maven fix with Renovate in GitLab mode. Check the
-    current POM and Artifactory target, create/reuse a draft MR, verify its exact
-    diff, run Maven tests, confirm the resolved version, then mark that MR ready.
-    Failures leave the MR draft. DRY_RUN=true performs a full Renovate simulation.
+    Apply one issue-selected Maven fix. Renovate updates directly declared
+    packages; transitive-only packages use a verified dependencyManagement
+    override. Check the base dependency version and Artifactory target, create or
+    reuse a draft MR, verify its exact diff, run Maven tests, confirm the resolved
+    version, then mark that MR ready. Failures leave the MR draft. DRY_RUN=true
+    performs a full Renovate simulation for directly declared packages.
   params:
     - name: REPOSITORY
       type: string
@@ -171,9 +173,51 @@ spec:
       command: [python3, /etc/renovate/remediation.py, prepare]
       volumeMounts:
         {{- include "renovate.runtimeMounts" . | nindent 8 }}
+    - name: base-dependency-tree
+      image: {{ .Values.remediation.mavenImage }}
+      env:
+        - name: HOME
+          value: /maven-home
+        - name: JAVA_TOOL_OPTIONS
+          value: -Duser.home=/maven-home
+      command: [/bin/bash, -c]
+      args:
+        - |
+          set -euo pipefail
+          if ! grep -q '"dependencyMode":"managed-override"' /work/runtime/request.json; then
+            echo "No transitive override requested; skipping base dependency tree."
+            exit 0
+          fi
+          cd "/work/base/$SUBDIRECTORY"
+          /usr/bin/mvn -B -ntp -s "$MAVEN_SETTINGS_FILE" \
+            org.apache.maven.plugins:maven-dependency-plugin:3.8.1:tree \
+            -DoutputType=json -DoutputFile=/evidence/base-dependency-tree.json
+      volumeMounts:
+        - name: runtime
+          mountPath: /work
+        - name: evidence
+          mountPath: /evidence
+        - name: maven-home
+          mountPath: /maven-home
+        - name: maven-tmp
+          mountPath: /tmp
+    - name: verify-base-dependency
+      image: {{ .Values.helperImage }}
+      command: [python3, /etc/renovate/remediation.py, check-base-dependency]
+      volumeMounts:
+        {{- include "renovate.runtimeMounts" . | nindent 8 }}
+        - name: evidence
+          mountPath: /evidence
     - name: ensure-draft
       image: {{ .Values.helperImage }}
       command: [python3, /etc/renovate/remediation.py, redraft]
+      env:
+        {{- include "renovate.scmEnv" . | nindent 8 }}
+      volumeMounts:
+        {{- include "renovate.runtimeMounts" . | nindent 8 }}
+    - name: prepare-managed-override
+      image: {{ .Values.helperImage }}
+      command: [python3, /etc/renovate/remediation.py, create-managed-override]
       env:
         {{- include "renovate.scmEnv" . | nindent 8 }}
       volumeMounts:

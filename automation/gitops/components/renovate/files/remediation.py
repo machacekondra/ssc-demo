@@ -1,5 +1,6 @@
 """Request guards, POM scope checks, and GitLab MR lifecycle for Renovate."""
 
+import base64
 import hashlib
 import json
 import os
@@ -191,13 +192,165 @@ def inspect_pom():
         if current != state["fixedVersion"]:
             edits.append(index_of(root, version))
     if not found:
-        raise ValueError("The package is not directly declared in the project POM; transitive overrides are unsupported")
+        # A transitive-only package can be pinned safely with a project-level
+        # dependencyManagement entry, but only after Maven confirms that the
+        # issue's current version is actually resolved by the base project.
+        state["dependencyMode"] = "managed-override"
+        state["edits"] = []
+        save(state)
+        print("Package is transitive; will add a verified project dependencyManagement override")
+        return
+    state["dependencyMode"] = "replace"
     state["edits"] = edits
     if not edits:
         state["status"] = "already-fixed"
         result("STATUS", "already-fixed")
         print("The requested fixed version is already declared; no MR is needed")
     save(state)
+
+
+def append_managed_dependency(root, state):
+    """Add the exact transitive version override to a POM XML root."""
+    namespace = root.tag.rpartition("}")[0] + "}" if "}" in root.tag else ""
+
+    def tag(local):
+        return namespace + local
+
+    management = root.find(tag("dependencyManagement"))
+    if management is None:
+        management = ET.Element(tag("dependencyManagement"))
+        # dependencyManagement precedes dependencies in the Maven POM model.
+        insert_at = len(root)
+        for local in ("dependencies", "repositories", "pluginRepositories", "build", "reporting", "profiles"):
+            existing = root.find(tag(local))
+            if existing is not None:
+                insert_at = list(root).index(existing)
+                break
+        root.insert(insert_at, management)
+
+    dependencies = management.find(tag("dependencies"))
+    if dependencies is None:
+        dependencies = ET.SubElement(management, tag("dependencies"))
+    for dependency in dependencies.findall(tag("dependency")):
+        coordinate = ((dependency.findtext(tag("groupId")) or "") + ":" +
+                      (dependency.findtext(tag("artifactId")) or ""))
+        if coordinate == state["package"]:
+            raise ValueError("The POM already has a managed entry for this package; refresh the CVE issue")
+
+    group_id, artifact_id = state["package"].split(":", 1)
+    dependency = ET.SubElement(dependencies, tag("dependency"))
+    ET.SubElement(dependency, tag("groupId")).text = group_id
+    ET.SubElement(dependency, tag("artifactId")).text = artifact_id
+    ET.SubElement(dependency, tag("version")).text = state["fixedVersion"]
+
+
+def check_base_dependency():
+    state = load()
+    if state.get("dependencyMode") != "managed-override":
+        return
+    tree_path = EVIDENCE / "base-dependency-tree.json"
+    if not tree_path.is_file():
+        raise ValueError("The base Maven dependency tree was not generated")
+    tree = json.loads(tree_path.read_text())
+    versions = set()
+
+    def visit(node):
+        if node.get("groupId", "") + ":" + node.get("artifactId", "") == state["package"]:
+            versions.add(node.get("version"))
+        for child in node.get("children", []):
+            visit(child)
+
+    visit(tree)
+    if versions != {state["currentVersion"]}:
+        if not versions:
+            raise ValueError("The package is not present in the base project's resolved Maven dependency tree")
+        raise ValueError("The issue is stale: the base project resolves " + state["package"] +
+                         " at " + ", ".join(sorted(str(version) for version in versions)))
+    state["baseVersionVerified"] = True
+    save(state)
+    print("Base Maven tree confirms " + state["package"] + " resolves to " + state["currentVersion"])
+
+
+def create_managed_override():
+    state = load()
+    if state.get("status") != "active" or state.get("dependencyMode") != "managed-override":
+        return
+    if state.get("dryRun"):
+        print("Dry run; no transitive override branch or MR will be created")
+        return
+    if not state.get("baseVersionVerified"):
+        raise ValueError("The transitive dependency version has not been verified against the base Maven tree")
+
+    original = (BASE / state["pomPath"]).read_bytes()
+    text = original.decode("utf-8")
+    parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
+    root = ET.fromstring(original, parser=parser)
+    for prefix, uri in re.findall(r"\bxmlns(?::([A-Za-z_][\w.-]*))?\s*=\s*['\"]([^'\"]+)['\"]", text):
+        ET.register_namespace(prefix or "", uri)
+    append_managed_dependency(root, state)
+    ET.indent(root, space="  ")
+    content = ET.tostring(
+        root, encoding="utf-8", xml_declaration=text.lstrip().startswith("<?xml")
+    )
+    if original.endswith(b"\n"):
+        content += b"\n"
+    if b"\r\n" in original:
+        content = content.replace(b"\n", b"\r\n")
+
+    mr = find_mr(state)
+    branch_path = "/repository/branches/" + urllib.parse.quote(state["branch"], safe="")
+    try:
+        branch = api(project_path(state) + branch_path)
+    except urllib.error.HTTPError as error:
+        if error.code != 404:
+            raise
+        branch = None
+
+    if branch:
+        file_path = urllib.parse.quote(state["pomPath"], safe="")
+        query = urllib.parse.urlencode({"ref": state["branch"]})
+        file_data = api(project_path(state) + "/repository/files/" + file_path + "?" + query)
+        existing = base64.b64decode(file_data["content"])
+        if existing != content:
+            raise ValueError("An existing remediation branch has different POM content; refusing to overwrite it")
+        commit_sha = branch["commit"]["id"]
+    else:
+        commit = api(project_path(state) + "/repository/commits", "POST", {
+            "branch": state["branch"],
+            "start_sha": state["baseSha"],
+            "commit_message": "fix(" + state["cveId"] + "): manage " + state["package"] +
+                              " at " + state["fixedVersion"],
+            "actions": [{
+                "action": "update",
+                "file_path": state["pomPath"],
+                "content": content.decode("utf-8"),
+            }],
+        })
+        commit_sha = commit["id"]
+
+    if mr is None:
+        description = state.get("justification", "")
+        if state.get("issueIid"):
+            description += "\n\nRelated to #" + state["issueIid"]
+        description += ("\n\nTekton remediation run: " + state.get("runName", "manual") +
+                        ". This MR remains draft until Maven verification passes.")
+        mr = api(project_path(state) + "/merge_requests", "POST", {
+            "source_branch": state["branch"],
+            "target_branch": state["baseBranch"],
+            "title": "Draft: Remediate " + state["cveId"] + " in " + state["package"],
+            "description": description.strip(),
+            "remove_source_branch": False,
+        })
+    elif not mr.get("draft", mr.get("work_in_progress", False)):
+        title = mr.get("title", "")
+        if not re.match(r"^(?:Draft:|WIP:|\[Draft\]|\(Draft\))\s*", title, flags=re.I):
+            api(project_path(state) + "/merge_requests/" + str(mr["iid"]), "PUT", {
+                "title": "Draft: " + title,
+            })
+
+    state["managedOverrideSha"] = commit_sha
+    save(state)
+    print("Created or reused draft transitive-remediation MR: " + mr["web_url"])
 
 
 def find_mr(state):
@@ -251,8 +404,11 @@ def check_change():
     if changed != [state["pomPath"]]:
         raise ValueError("The candidate must change only the requested project POM")
     expected = prepare.xml_root((BASE / state["pomPath"]).read_bytes())
-    for indexes in state["edits"]:
-        node_at(expected, indexes).text = state["fixedVersion"]
+    if state.get("dependencyMode") == "managed-override":
+        append_managed_dependency(expected, state)
+    else:
+        for indexes in state["edits"]:
+            node_at(expected, indexes).text = state["fixedVersion"]
     actual = prepare.xml_root((CANDIDATE / state["pomPath"]).read_bytes())
     if semantic(expected) != semantic(actual):
         raise ValueError("The candidate contains changes beyond the requested dependency version")
@@ -314,7 +470,8 @@ def main():
         if load()["status"] == "active":
             prepare.prepare()
         return
-    {"preflight": preflight, "inspect": inspect_pom, "redraft": redraft,
+    {"preflight": preflight, "inspect": inspect_pom, "check-base-dependency": check_base_dependency,
+     "create-managed-override": create_managed_override, "redraft": redraft,
      "collect": collect, "check-change": check_change, "check-dependency": check_dependency,
      "finalize": finalize}[command]()
 
