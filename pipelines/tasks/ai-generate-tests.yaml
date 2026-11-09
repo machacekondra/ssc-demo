@@ -178,6 +178,15 @@ spec:
             [ -n "${AI_BASE_URL:-}" ] && export OPENAI_API_BASE="${AI_BASE_URL}"
             export OPENAI_API_KEY="${OPENAI_API_KEY:-placeholder}"
             case "${MODEL}" in */*) AIDER_MODEL="${MODEL}";; *) AIDER_MODEL="openai/${MODEL}";; esac
+            AIDER_MODEL_SETTINGS_ARGS=()
+            if [ "${AIDER_MODEL}" = "openai/gpt-6-luna" ]; then
+              mkdir -p "${HOME}"
+              cat > "${HOME}/gpt-6-luna-aider-settings.yml" <<'YAML'
+        - name: openai/gpt-6-luna
+          use_temperature: false
+        YAML
+              AIDER_MODEL_SETTINGS_ARGS=(--model-settings-file "${HOME}/gpt-6-luna-aider-settings.yml")
+            fi
             # Pass main sources as read-only reference so the agent only creates
             # files under src/test; --map-tokens bounds the repo-map context and
             # --subtree-only keeps aider scoped to this project dir.
@@ -230,6 +239,7 @@ spec:
           case "${AGENT}" in
             aider)
               timeout "${AGENT_TIMEOUT}" aider \
+                "${AIDER_MODEL_SETTINGS_ARGS[@]}" \
                 --model "${AIDER_MODEL}" \
                 --yes-always --no-auto-commits --no-check-update --no-gitignore \
                 --no-show-model-warnings \
